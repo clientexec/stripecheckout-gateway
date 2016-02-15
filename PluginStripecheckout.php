@@ -40,7 +40,12 @@ class PluginStripecheckout extends GatewayPlugin
                                 "type"          =>"hidden",
                                 "description"   =>lang("1 = Only used to specify a billing type for a customer. 0 = full fledged plugin requiring complete functions"),
                                 "value"         =>"0"
-                                )
+                                ),
+            lang('Auto Payment') => array (
+                'type'          => 'hidden',
+                'description'   => lang('No description'),
+                'value'         => '1'
+            )
         );
         return $variables;
     }
@@ -51,7 +56,12 @@ class PluginStripecheckout extends GatewayPlugin
         return $this->singlePayment($params);
     }
 
-    function singlePayment($params)
+    function singlepayment($params)
+    {
+        return $this->autopayment($params);
+    }
+
+    function autopayment($params)
     {
         $cPlugin = new Plugin($params['invoiceNumber'], "stripecheckout", $this->user);
         $cPlugin->setAmount($params['invoiceTotal']);
@@ -68,10 +78,26 @@ class PluginStripecheckout extends GatewayPlugin
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
-            $customer = \Stripe\Customer::create(array(
-                'email' => $params['userEmail'],
-                'card'  => $params['stripeTokenId']
-            ));
+            $profile_id == '';
+            if(isset($params['stripeTokenId'])){
+                $customer = \Stripe\Customer::create(array(
+                    'email' => $params['userEmail'],
+                    'card'  => $params['stripeTokenId']
+                ));
+                $profile_id = $customer->id;
+                $user = new User($params['CustomerID']);
+                $user->updateCustomTag('Billing-Profile-ID', serialize(array('stripecheckout' => $profile_id)));
+                $user->save();
+            }else{
+                $Billing_Profile_ID = '';
+                $user = new User($params['CustomerID']);
+                if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
+                    $profile_id_array = unserialize($Billing_Profile_ID);
+                    if(is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])){
+                        $profile_id = $profile_id_array['stripecheckout'];
+                    }
+                }
+            }
 
             if ($isRefund){
                 $charge = \Stripe\Refund::create(array(
@@ -85,7 +111,7 @@ class PluginStripecheckout extends GatewayPlugin
                 $totalAmount = sprintf("%01.2f", round($params["invoiceTotal"], 2)) * 100;
 
                 $charge = \Stripe\Charge::create(array(
-                    'customer'    => $customer->id,
+                    'customer'    => $profile_id,
                     'amount'      => $totalAmount,
                     'currency'    => $params['userCurrency'],
                     'description' => 'Invoice #'.$params['invoiceNumber'],
