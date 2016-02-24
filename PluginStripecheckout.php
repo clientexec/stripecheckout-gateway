@@ -199,4 +199,97 @@ class PluginStripecheckout extends GatewayPlugin
             return $this->user->lang("There was an error performing this operation.")." ".$e->getMessage();
         }
     }
+
+    // Create customer Stripe Checkout profile
+    function createFullCustomerProfile($params)
+    {
+        try {
+            // Use Stripe's bindings...
+            \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+
+            $customer = \Stripe\Customer::create(array(
+                'email' => $params['userEmail'],
+                'card'  => array(
+                    'number' => $params['userCCNumber'],
+                    'exp_month' => $params['cc_exp_month'],
+                    'exp_year' => $params['cc_exp_year']
+                )
+            ));
+            $profile_id = $customer->id;
+            $user = new User($params['CustomerID']);
+            $user->updateCustomTag('Billing-Profile-ID', serialize(array('stripecheckout' => $profile_id)));
+            $user->save();
+
+            return array(
+                'error'               => false,
+                'profile_id'          => $profile_id
+            );
+        } catch(\Stripe\Error\Card $e) {
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\RateLimit $e) {
+            // Too many requests made to the API too quickly
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Too many requests made to the API too quickly.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\InvalidRequest $e) {
+            // Invalid parameters were supplied to Stripe's API.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Invalid parameters were supplied to Stripe's API.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\Authentication $e) {
+            // Authentication with Stripe's API failed. Maybe you changed API keys recently.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Authentication with Stripe's API failed. Maybe you changed API keys recently.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\ApiConnection $e) {
+            // Network communication with Stripe failed.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Network communication with Stripe failed")." ".$err['message']
+            );
+        } catch (\Stripe\Error\Base $e) {
+            // Display a very generic error to the user, and maybe send yourself an email.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
+            );
+        } catch (Exception $e) {
+            // Something else happened, completely unrelated to Stripe
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$e->getMessage()
+            );
+        }
+    }
+
 }
