@@ -11,40 +11,45 @@ class PluginStripecheckout extends GatewayPlugin
     function getVariables()
     {
         $variables = array (
-            lang("Plugin Name") => array (
-                                "type"          =>"hidden",
-                                "description"   =>lang("How CE sees this plugin ( not to be confused with the Signup Name )"),
-                                "value"         =>"Stripe Checkout"
-                                ),
+            lang('Plugin Name') => array (
+                'type'        => 'hidden',
+                'description' => lang('How CE sees this plugin ( not to be confused with the Signup Name )'),
+                'value'       => 'Stripe Checkout'
+            ),
             lang('Stripe Checkout Gateway Secret Key') => array (
-                                'type'          =>'password',
-                                'description'   =>lang('Please enter your Stripe Checkout Gateway Secret Key here.'),
-                                'value'         =>''
-                               ),
+                'type'        => 'password',
+                'description' => lang('Please enter your Stripe Checkout Gateway Secret Key here.'),
+                'value'       => ''
+            ),
             lang('Stripe Checkout Gateway Publishable Key') => array (
-                                'type'          =>'password',
-                                'description'   =>lang('Please enter your Stripe Checkout Gateway Publishable Key here.'),
-                                'value'         =>''
-                               ),
-            lang("Invoice After Signup") => array (
-                                "type"          =>"yesno",
-                                "description"   =>lang("Select YES if you want an invoice sent to the customer after signup is complete."),
-                                "value"         =>"1"
-                                ),
-            lang("Signup Name") => array (
-                                "type"          =>"text",
-                                "description"   =>lang("Select the name to display in the signup process for this payment type. Example: eCheck or Credit Card."),
-                                "value"         =>"Stripe Checkout"
-                                ),
-            lang("Dummy Plugin") => array (
-                                "type"          =>"hidden",
-                                "description"   =>lang("1 = Only used to specify a billing type for a customer. 0 = full fledged plugin requiring complete functions"),
-                                "value"         =>"0"
-                                ),
+                'type'        => 'password',
+                'description' => lang('Please enter your Stripe Checkout Gateway Publishable Key here.'),
+                'value'       => ''
+            ),
+            lang('Stripe Checkout Logo Image URL') => array (
+                'type'        => 'text',
+                'description' => lang('A relative or absolute URL pointing to a square image of your brand or product.</br>The recommended minimum size is 128x128px.</br>The recommended image types are .gif, .jpeg, and .png.</br>Leave this field empty to use the default image.'),
+                'value'       => ''
+            ),
+            lang('Invoice After Signup') => array (
+                'type'        => 'yesno',
+                'description' => lang('Select YES if you want an invoice sent to the customer after signup is complete.'),
+                'value'       => '1'
+            ),
+            lang('Signup Name') => array (
+                'type'        => 'text',
+                'description' => lang('Select the name to display in the signup process for this payment type. Example: eCheck or Credit Card.'),
+                'value'       => 'Stripe Checkout'
+            ),
+            lang('Dummy Plugin') => array (
+                'type'        => 'hidden',
+                'description' => lang('1 = Only used to specify a billing type for a customer. 0 = full fledged plugin requiring complete functions'),
+                'value'       => '0'
+            ),
             lang('Auto Payment') => array (
-                'type'          => 'hidden',
-                'description'   => lang('No description'),
-                'value'         => '1'
+                'type'        => 'hidden',
+                'description' => lang('No description'),
+                'value'       => '1'
             )
         );
         return $variables;
