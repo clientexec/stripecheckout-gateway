@@ -26,6 +26,11 @@ class PluginStripecheckout extends GatewayPlugin
                 'description' => lang('Please enter your Stripe Checkout Gateway Publishable Key here.'),
                 'value'       => ''
             ),
+            lang('Stripe Checkout Accept Bitcoin Payments') => array (
+                'type'        => 'yesno',
+                'description' => lang('Select YES if you want Stripe Checkout to accept Bitcoin payments.</br>You currently need a US bank account to accept Bitcoin payments.</br>Stripe users in more than twenty countries can attach a US bank account to their Stripe account, but we know it is not ideal for non-US users, so we are working to expand Bitcoin acceptance more broadly.</br>To process live Bitcoin payments, you need to <a href="https://dashboard.stripe.com/account/bitcoin/enable" target="_blank">enable the live Bitcoin API on your account</a>'),
+                'value'       => '0'
+            ),
             lang('Stripe Checkout Logo Image URL') => array (
                 'type'        => 'text',
                 'description' => lang('A relative or absolute URL pointing to a square image of your brand or product.</br>The recommended minimum size is 128x128px.</br>The recommended image types are .gif, .jpeg, and .png.</br>Leave this field empty to use the default image.'),
