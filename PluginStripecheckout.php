@@ -31,6 +31,11 @@ class PluginStripecheckout extends GatewayPlugin
                 'description' => lang('Select YES if you want Stripe Checkout to accept Bitcoin payments.</br>You currently need a US bank account to accept Bitcoin payments.</br>Stripe users in more than twenty countries can attach a US bank account to their Stripe account, but we know it is not ideal for non-US users, so we are working to expand Bitcoin acceptance more broadly.</br>To process live Bitcoin payments, you need to <a href="https://dashboard.stripe.com/account/bitcoin/enable" target="_blank">enable the live Bitcoin API on your account</a>'),
                 'value'       => '0'
             ),
+            lang('Bitcoin Address - User Custom Field') => array (
+                'type'        => 'text',
+                'description' => lang('Create a User Custom Field <a href="index.php?fuse=admin&controller=settings&view=usercustomfields" target="_blank">here</a> that will be used for your customers to enter a Bitcoin Address.</br>Enter in this field the exact same name you used to create the User Custom Field.</br>This will be used in case you need to refund them a Bitcoin Payment.'),
+                'value'       => 'Bitcoin Address'
+            ),
             lang('Stripe Checkout Logo Image URL') => array (
                 'type'        => 'text',
                 'description' => lang('A relative or absolute URL pointing to a square image of your brand or product.</br>The recommended minimum size is 128x128px.</br>The recommended image types are .gif, .jpeg, and .png.</br>Leave this field empty to use the default image.'),
@@ -88,19 +93,18 @@ class PluginStripecheckout extends GatewayPlugin
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
-            $profile_id == '';
+            $profile_id = '';
+            $user = new User($params['CustomerID']);
             if(isset($params['stripeTokenId'])){
                 $customer = \Stripe\Customer::create(array(
                     'email' => $params['userEmail'],
                     'card'  => $params['stripeTokenId']
                 ));
                 $profile_id = $customer->id;
-                $user = new User($params['CustomerID']);
                 $user->updateCustomTag('Billing-Profile-ID', serialize(array('stripecheckout' => $profile_id)));
                 $user->save();
             }else{
                 $Billing_Profile_ID = '';
-                $user = new User($params['CustomerID']);
                 if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
                     $profile_id_array = unserialize($Billing_Profile_ID);
                     if(is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])){
@@ -110,12 +114,28 @@ class PluginStripecheckout extends GatewayPlugin
             }
 
             if ($isRefund){
-                $charge = \Stripe\Refund::create(array(
-                    'charge'   => $params['invoiceRefundTransactionId'],
-                    'metadata' => array(
-                        'order_id' => $params['invoiceNumber']
-                    )
-                ));
+                $BitcoinOrCC = substr($params['invoiceRefundTransactionId'], 0, 3);
+                if($BitcoinOrCC == 'py_'){// py_ Bitcoin
+                    $customer_bitcoin_address = '';
+                    $Bitcoin_Address_User_Custom_Field = trim($this->settings->get('plugin_stripecheckout_Bitcoin Address - User Custom Field'));
+                    if($Bitcoin_Address_User_Custom_Field != ''){
+                        $customer_bitcoin_address = trim($user->customFields->getCustomFieldByName($Bitcoin_Address_User_Custom_Field, true));
+                    }
+                    $charge = \Stripe\Refund::create(array(
+                        'refund_address' => $customer_bitcoin_address,
+                        'charge'         => $params['invoiceRefundTransactionId'],
+                        'metadata'       => array(
+                            'order_id' => $params['invoiceNumber']
+                        )
+                    ));
+                }else{// ch_ Credit Card
+                    $charge = \Stripe\Refund::create(array(
+                        'charge'   => $params['invoiceRefundTransactionId'],
+                        'metadata' => array(
+                            'order_id' => $params['invoiceNumber']
+                        )
+                    ));
+                }
             }else{
                 //Needs to be in cents
                 $totalAmount = sprintf("%01.2f", round($params["invoiceTotal"], 2)) * 100;
