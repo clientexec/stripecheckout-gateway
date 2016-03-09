@@ -101,6 +101,8 @@ class PluginStripecheckout extends GatewayPlugin
                     'card'  => $params['stripeTokenId']
                 ));
                 $profile_id = $customer->id;
+                $Billing_Profile_ID = '';
+                $user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID);
                 $user->updateCustomTag('Billing-Profile-ID', serialize(array('stripecheckout' => $profile_id)));
                 $user->save();
             }else{
@@ -247,6 +249,8 @@ class PluginStripecheckout extends GatewayPlugin
             ));
             $profile_id = $customer->id;
             $user = new User($params['CustomerID']);
+            $Billing_Profile_ID = '';
+            $user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID);
             $user->updateCustomTag('Billing-Profile-ID', serialize(array('stripecheckout' => $profile_id)));
             $user->save();
 
