@@ -156,7 +156,7 @@ class PluginStripecheckout extends GatewayPlugin
             if($charge['failure_message'] == ''){
                 if($charge['object'] == 'charge'){
                     $cPlugin->setTransactionID($charge['id']);
-                        if($charge['paid'] == true && $charge['status'] == 'succeeded'){
+                        if ( $charge['paid'] == true && in_array($charge['status'], array('succeeded', 'paid')) ) {
                             $chargeAmount = sprintf("%01.2f", round(($charge['amount'] / 100), 2));
                             $cPlugin->PaymentAccepted($chargeAmount, "Stripe Checkout payment of {$chargeAmount} was accepted.", $charge['id']);
                             return '';
