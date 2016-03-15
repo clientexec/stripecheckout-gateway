@@ -96,15 +96,12 @@ class PluginStripecheckout extends GatewayPlugin
             $profile_id = '';
             $user = new User($params['CustomerID']);
             if(isset($params['stripeTokenId'])){
-                $customer = \Stripe\Customer::create(array(
-                    'email' => $params['userEmail'],
-                    'card'  => $params['stripeTokenId']
-                ));
-                $profile_id = $customer->id;
-                $Billing_Profile_ID = '';
-                $user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID);
-                $user->updateCustomTag('Billing-Profile-ID', serialize(array('stripecheckout' => $profile_id)));
-                $user->save();
+                $fullCustomerProfile = $this->createFullCustomerProfile($params);
+                if($fullCustomerProfile['error']){
+                    $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$fullCustomerProfile['detail']);
+                    return $this->user->lang("There was an error performing this operation.")." ".$fullCustomerProfile['detail'];
+                }
+                $profile_id = $fullCustomerProfile['profile_id'];
             }else{
                 $Billing_Profile_ID = '';
                 if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
@@ -239,14 +236,21 @@ class PluginStripecheckout extends GatewayPlugin
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
-            $customer = \Stripe\Customer::create(array(
-                'email' => $params['userEmail'],
-                'card'  => array(
-                    'number' => $params['userCCNumber'],
-                    'exp_month' => $params['cc_exp_month'],
-                    'exp_year' => $params['cc_exp_year']
-                )
-            ));
+            if(isset($params['stripeTokenId'])){
+                $customer = \Stripe\Customer::create(array(
+                    'email' => $params['userEmail'],
+                    'card'  => $params['stripeTokenId']
+                ));
+            }else{
+                $customer = \Stripe\Customer::create(array(
+                    'email' => $params['userEmail'],
+                    'card'  => array(
+                        'number' => $params['userCCNumber'],
+                        'exp_month' => $params['cc_exp_month'],
+                        'exp_year' => $params['cc_exp_year']
+                    )
+                ));
+            }
             $profile_id = $customer->id;
             $user = new User($params['CustomerID']);
             $Billing_Profile_ID = '';
@@ -325,5 +329,4 @@ class PluginStripecheckout extends GatewayPlugin
             );
         }
     }
-
 }
