@@ -60,7 +60,12 @@ class PluginStripecheckout extends GatewayPlugin
                 'type'        => 'hidden',
                 'description' => lang('No description'),
                 'value'       => '1'
-            )
+            ),
+            lang('Update Gateway') => array (
+                'type'        => 'hidden',
+                'description' => lang('1 = Create, update or remove Gateway customer information through the function UpdateGateway when customer choose to use this gateway, customer profile is updated, customer is deleted or customer status is changed. 0 = Do nothing.'),
+                'value'       => '1'
+            ),
         );
         return $variables;
     }
@@ -252,10 +257,17 @@ class PluginStripecheckout extends GatewayPlugin
                 ));
             }
             $profile_id = $customer->id;
-            $user = new User($params['CustomerID']);
             $Billing_Profile_ID = '';
-            $user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID);
-            $user->updateCustomTag('Billing-Profile-ID', serialize(array('stripecheckout' => $profile_id)));
+            $profile_id_array = array();
+            $user = new User($params['CustomerID']);
+            if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
+                $profile_id_array = unserialize($Billing_Profile_ID);
+            }
+            if(!is_array($profile_id_array)){
+                $profile_id_array = array();
+            }
+            $profile_id_array['stripecheckout'] = $profile_id;
+            $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
             $user->save();
 
             return array(
@@ -329,4 +341,123 @@ class PluginStripecheckout extends GatewayPlugin
             );
         }
     }
+
+    function UpdateGateway($params){
+        switch($params['Action']){
+            case 'delete':  // When deleting the customer or changing to use another gateway
+                $this->CustomerRemove($params);
+                break;
+        }
+    }
+
+    function CustomerRemove($params){
+        try {
+            // Use Stripe's bindings...
+            \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+
+
+            $profile_id = '';
+            $Billing_Profile_ID = '';
+            $profile_id_array = array();
+            $user = new User($params['User ID']);
+            if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
+                $profile_id_array = unserialize($Billing_Profile_ID);
+                if(is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])){
+                    $profile_id = $profile_id_array['stripecheckout'];
+                }
+            }
+
+            $customer = \Stripe\Customer::retrieve($profile_id);
+            $customer = $customer->delete();
+
+            if($customer->id == $profile_id && $customer->deleted == true){
+
+                if(is_array($profile_id_array)){
+                    unset($profile_id_array['stripecheckout']);
+                }else{
+                    $profile_id_array = array();
+                }
+
+                $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
+                $user->save();
+
+                return array(
+                    'error'               => false,
+                    'profile_id'          => $profile_id
+                );
+            }else{
+                return array(
+                    'error'               => true,
+                    'profile_id'          => $this->user->lang("There was an error performing this operation.")
+                );
+            }
+        } catch(\Stripe\Error\Card $e) {
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\RateLimit $e) {
+            // Too many requests made to the API too quickly
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Too many requests made to the API too quickly.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\InvalidRequest $e) {
+            // Invalid parameters were supplied to Stripe's API.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Invalid parameters were supplied to Stripe's API.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\Authentication $e) {
+            // Authentication with Stripe's API failed. Maybe you changed API keys recently.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Authentication with Stripe's API failed. Maybe you changed API keys recently.")." ".$err['message']
+            );
+        } catch (\Stripe\Error\ApiConnection $e) {
+            // Network communication with Stripe failed.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Network communication with Stripe failed")." ".$err['message']
+            );
+        } catch (\Stripe\Error\Base $e) {
+            // Display a very generic error to the user, and maybe send yourself an email.
+            $body = $e->getJsonBody();
+            $err  = $body['error'];
+
+            //A human-readable message giving more details about the error.
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
+            );
+        } catch (Exception $e) {
+            // Something else happened, completely unrelated to Stripe
+            return array(
+                'error'  => true,
+                'detail' => $this->user->lang("There was an error performing this operation.")." ".$e->getMessage()
+            );
+        }
+    }
+
+
 }
