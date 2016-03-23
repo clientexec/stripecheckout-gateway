@@ -344,6 +344,12 @@ class PluginStripecheckout extends GatewayPlugin
 
     function UpdateGateway($params){
         switch($params['Action']){
+            case 'update':  // When updating customer profile or changing to use this gateway
+                $statusAliasGateway = StatusAliasGateway::getInstance($this->user);
+                if(in_array($params['Status'], $statusAliasGateway->getUserStatusIdsFor(array(USER_STATUS_INACTIVE, USER_STATUS_CANCELLED, USER_STATUS_FRAUD)))){
+                  $this->CustomerRemove($params);
+                }
+                break;
             case 'delete':  // When deleting the customer or changing to use another gateway
                 $this->CustomerRemove($params);
                 break;
@@ -367,30 +373,38 @@ class PluginStripecheckout extends GatewayPlugin
                 }
             }
 
-            $customer = \Stripe\Customer::retrieve($profile_id);
-            $customer = $customer->delete();
+            if($profile_id != ''){
+                $customer = \Stripe\Customer::retrieve($profile_id);
+                $customer = $customer->delete();
 
-            if($customer->id == $profile_id && $customer->deleted == true){
+                if($customer->id == $profile_id && $customer->deleted == true){
 
-                if(is_array($profile_id_array)){
-                    unset($profile_id_array['stripecheckout']);
+                    if(is_array($profile_id_array)){
+                        unset($profile_id_array['stripecheckout']);
+                    }else{
+                        $profile_id_array = array();
+                    }
+
+                    $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
+                    $user->save();
+
+                    return array(
+                        'error'      => false,
+                        'profile_id' => $profile_id
+                    );
                 }else{
-                    $profile_id_array = array();
+                    return array(
+                        'error'      => true,
+                        'profile_id' => $this->user->lang("There was an error performing this operation.")
+                    );
                 }
-
-                $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
-                $user->save();
-
-                return array(
-                    'error'               => false,
-                    'profile_id'          => $profile_id
-                );
             }else{
                 return array(
-                    'error'               => true,
-                    'profile_id'          => $this->user->lang("There was an error performing this operation.")
+                    'error'      => true,
+                    'profile_id' => $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("profile_id is empty.")
                 );
             }
+
         } catch(\Stripe\Error\Card $e) {
             $body = $e->getJsonBody();
             $err  = $body['error'];
