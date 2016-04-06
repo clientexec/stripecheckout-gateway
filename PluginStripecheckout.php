@@ -237,6 +237,11 @@ class PluginStripecheckout extends GatewayPlugin
     // Create customer Stripe Checkout profile
     function createFullCustomerProfile($params)
     {
+        $validate = true;
+        if ( $params['validate'] === false ) {
+          $validate = false;
+        }
+        
         try {
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
@@ -253,7 +258,8 @@ class PluginStripecheckout extends GatewayPlugin
                         'number' => $params['userCCNumber'],
                         'exp_month' => $params['cc_exp_month'],
                         'exp_year' => $params['cc_exp_year']
-                    )
+                    ),
+                   'validate' => $validate
                 ));
             }
             $profile_id = $customer->id;
