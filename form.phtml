@@ -12,7 +12,7 @@
         image: '<?php echo $this->logoImage; ?>',
         locale: 'auto',
         token: function(token) {
-          <?php if ( $this->from == 'invoice' || $this->form == 'signup' ) { ?>
+          <?php if ( $this->from == 'invoice' || $this->from == 'signup' ) { ?>
             var elem = document.getElementById("stripeTokenId");
             elem.value = token.id;
             $('#submitButton').click();
