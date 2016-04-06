@@ -473,5 +473,29 @@ class PluginStripecheckout extends GatewayPlugin
         }
     }
 
+    public function getForm($args)
+    {
 
+      $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+      $this->view->logoImage = $this->getVariable('Stripe Checkout Logo Image URL');
+      $this->view->acceptBitcoins = ($this->getVariable('Stripe Checkout Accept Bitcoin Payments')) ? 'true' : 'false';
+      $this->view->companyName = $this->settings->get("Company Name");
+      $this->view->invoiceId = $args['invoiceId'];
+      $this->view->currency = $args['currency'];
+      $this->view->invoiceBalanceDue = $args['invoiceBalanceDue'];
+      $this->view->panelLabel = $args['panellabel'];
+      $this->view->from = $args['from'];
+      $this->view->termsConditions = $args['termsConditions'];
+
+      if ( $args['from'] == 'paymentmethod' ) {
+        $this->view->acceptBitcoins = 'false';
+      }
+
+      if($this->view->logoImage == ''){
+          $SoftwareURL = mb_substr(CE_Lib::getSoftwareURL(),-1,1) == "//" ? CE_Lib::getSoftwareURL() : CE_Lib::getSoftwareURL()."/";
+          $this->view->logoImage = $SoftwareURL.'plugins/gateways/stripecheckout/logo.png';
+      }
+
+      return $this->view->render('form.phtml');
+    }
 }
