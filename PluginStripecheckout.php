@@ -400,13 +400,13 @@ class PluginStripecheckout extends GatewayPlugin
                     );
                 }else{
                     return array(
-                        'error'      => true,
+                        'error'  => true,
                         'detail' => $this->user->lang("There was an error performing this operation.")
                     );
                 }
             }else{
                 return array(
-                    'error'      => true,
+                    'error'  => true,
                     'detail' => $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("profile_id is empty.")
                 );
             }
