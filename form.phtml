@@ -2,9 +2,9 @@
 
 <script data-cfasync="false" src="https://checkout.stripe.com/checkout.js"></script>
 <?php if ( $this->from == 'signup' ) { ?>
-  <a style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large <?php if(@$this->termsConditions) { ?>disabled<?php } ?>" id="customButton"></a>
+    <a style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large <?php if(@$this->termsConditions) { ?>disabled<?php } ?>" id="customButton"></a>
 <?php } else if ( $this->from == 'invoice' ) { ?>
-<button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large" id="customButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
+    <button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large" id="customButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
 <?php } ?>
 <script data-cfasync="false" type="text/javascript">
     var handler = StripeCheckout.configure({
@@ -12,61 +12,71 @@
         image: '<?php echo $this->logoImage; ?>',
         locale: 'auto',
         token: function(token) {
-          <?php if ( $this->from == 'invoice' || $this->from == 'signup' ) { ?>
             var elem = document.getElementById("stripeTokenId");
             elem.value = token.id;
-            $('#submitButton').click();
-            <?php } else if ($this-> from == 'paymentmethod' ) { ?>
-            var elem = document.getElementById("stripeTokenId");
-            elem.value = token.id;
-            var valid = $('.update-payment-method-frm').parsley( 'validate' );
-            if (valid) $('.update-payment-method-frm').submit();
+
+            <?php if ( $this->from == 'invoice' || $this->from == 'signup' ) { ?>
+                $('#submitButton').click();
+            <?php } else if ( $this->from == 'paymentmethod' ) { ?>
+                var valid = $('.update-payment-method-frm').parsley( 'validate' );
+                if (valid) $('.update-payment-method-frm').submit();
             <?php } ?>
         }
     });
 
     $('#customButton').on('click', function(e) {
-      <?php if ( $this->from == 'signup' ) { ?>
-      if ( $('#submitForm').parsley( 'validate' ) ) {
-      <?php } ?>
+        <?php if ( $this->from == 'signup' ) { ?>
+            if ( $('#submitForm').parsley( 'validate' ) ) {
+        <?php } ?>
+
         // Open Checkout with further options
         openHandler();
-      <?php if ( $this->from == 'signup' ) { ?>
-      }
-      <?php } ?>
-      e.preventDefault();
+
+        <?php if ( $this->from == 'signup' ) { ?>
+            }
+        <?php } ?>
+
+        e.preventDefault();
     });
 
     function openHandler() {
-      handler.open({
-          name: '<?php echo $this->companyName; ?>',
+        handler.open({
+            <?php if ( $this->from == 'paymentmethod' ) { ?>
+                <?php if ( $this->hasBillingProfile ) { ?>
+                    name: '<?php echo $this->user->lang("Update your Credit Card?");?>',
+                <?php } else { ?>
+                    name: '<?php echo $this->user->lang("Enter your Credit Card");?>',
+                <?php } ?>
+            <?php } else { ?>
+                name: '<?php echo $this->companyName; ?>',
+            <?php } ?>
 
-          <?php if ( $this->from == 'signup' ) { ?>
-          email: document.getElementById("CT_4").value+'<?php echo @$this->user->getEmail(); ?>',
-          <?php } else { ?>
-          email: '<?php echo $this->user->getEmail(); ?>',
-          <?php } ?>
+            <?php if ( $this->from == 'signup' ) { ?>
+                email: document.getElementById("CT_4").value+'<?php echo @$this->user->getEmail(); ?>',
+            <?php } else { ?>
+                email: '<?php echo $this->user->getEmail(); ?>',
+            <?php } ?>
 
-          allowrememberme: true,
-          panellabel: '<?php echo $this->panelLabel; ?>',
+            allowrememberme: true,
+            panellabel: '<?php echo $this->panelLabel; ?>',
 
-          <?php if ( $this->from == 'invoice' ) { ?>
-          description: '<?php echo $this->user->lang("Invoice")." #".$this->invoiceId;?>',
-          amount: '<?php echo $this->invoiceBalanceDue*100;?>',
-          currency: '<?php echo $this->currency;?>',
-          <?php } else if ( $this->from == 'signup' )  { ?>
-          description: '<?php echo $this->user->lang("New Order");?>',
-          amount: (document.getElementById("totalPay_raw").value * 100),
-          currency: '<?php echo $this->Currency;?>',
-          <?php } ?>
+            <?php if ( $this->from == 'invoice' ) { ?>
+                description: '<?php echo $this->user->lang("Invoice")." #".$this->invoiceId;?>',
+                amount: '<?php echo $this->invoiceBalanceDue*100;?>',
+                currency: '<?php echo $this->currency;?>',
+            <?php } else if ( $this->from == 'signup' )  { ?>
+                description: '<?php echo $this->user->lang("New Order");?>',
+                amount: (document.getElementById("totalPay_raw").value * 100),
+                currency: '<?php echo $this->Currency;?>',
+            <?php } ?>
 
-          billingaddress: false,
-          shippingaddress: false,
-          zipcode: false,
-          bitcoin: <?php echo $this->acceptBitcoins; ?>,
-          alipay: false,
-          alipayreusable: false
-      });
+            billingaddress: false,
+            shippingaddress: false,
+            zipcode: false,
+            bitcoin: <?php echo $this->acceptBitcoins; ?>,
+            alipay: false,
+            alipayreusable: false
+        });
     }
 
     // Close Checkout on page navigation
