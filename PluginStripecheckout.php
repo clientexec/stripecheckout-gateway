@@ -155,10 +155,8 @@ class PluginStripecheckout extends GatewayPlugin
                         )
                     ));
                 }else{
-                    return array(
-                        'error'  => true,
-                        'detail' => $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card.")
-                    );
+                    $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card."));
+                    return $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card.");
                 }
             }
 
