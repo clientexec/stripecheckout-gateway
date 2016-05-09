@@ -141,18 +141,25 @@ class PluginStripecheckout extends GatewayPlugin
                     ));
                 }
             }else{
-                //Needs to be in cents
-                $totalAmount = sprintf("%01.2f", round($params["invoiceTotal"], 2)) * 100;
+                if($profile_id != ''){
+                    //Needs to be in cents
+                    $totalAmount = sprintf("%01.2f", round($params["invoiceTotal"], 2)) * 100;
 
-                $charge = \Stripe\Charge::create(array(
-                    'customer'    => $profile_id,
-                    'amount'      => $totalAmount,
-                    'currency'    => $params['userCurrency'],
-                    'description' => 'Invoice #'.$params['invoiceNumber'],
-                    'metadata'    => array(
-                        'order_id' => $params['invoiceNumber']
-                    )
-                ));
+                    $charge = \Stripe\Charge::create(array(
+                        'customer'    => $profile_id,
+                        'amount'      => $totalAmount,
+                        'currency'    => $params['userCurrency'],
+                        'description' => 'Invoice #'.$params['invoiceNumber'],
+                        'metadata'    => array(
+                            'order_id' => $params['invoiceNumber']
+                        )
+                    ));
+                }else{
+                    return array(
+                        'error'  => true,
+                        'detail' => $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card.")
+                    );
+                }
             }
 
             $charge = $charge->__toArray(true);
@@ -407,7 +414,7 @@ class PluginStripecheckout extends GatewayPlugin
             }else{
                 return array(
                     'error'  => true,
-                    'detail' => $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("profile_id is empty.")
+                    'detail' => $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card.")
                 );
             }
 
