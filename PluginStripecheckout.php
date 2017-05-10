@@ -10,62 +10,93 @@ class PluginStripecheckout extends GatewayPlugin
 {
     function getVariables()
     {
-        $variables = array (
-            lang('Plugin Name') => array (
+        $variables = array(
+            lang('Plugin Name') => array(
                 'type'        => 'hidden',
                 'description' => lang('How CE sees this plugin ( not to be confused with the Signup Name )'),
                 'value'       => 'Stripe Checkout'
             ),
-            lang('Stripe Checkout Gateway Secret Key') => array (
+            lang('Stripe Checkout Gateway Secret Key') => array(
                 'type'        => 'password',
                 'description' => lang('Please enter your Stripe Checkout Gateway Secret Key here.'),
                 'value'       => ''
             ),
-            lang('Stripe Checkout Gateway Publishable Key') => array (
+            lang('Stripe Checkout Gateway Publishable Key') => array(
                 'type'        => 'password',
                 'description' => lang('Please enter your Stripe Checkout Gateway Publishable Key here.'),
                 'value'       => ''
             ),
-            lang('Stripe Checkout Accept Bitcoin Payments') => array (
+            lang('Stripe Checkout Accept Bitcoin Payments') => array(
                 'type'        => 'yesno',
                 'description' => lang('Select YES if you want Stripe Checkout to accept Bitcoin payments.</br>You currently need a US bank account to accept Bitcoin payments.</br>Stripe users in more than twenty countries can attach a US bank account to their Stripe account, but we know it is not ideal for non-US users, so we are working to expand Bitcoin acceptance more broadly.</br>To process live Bitcoin payments, you need to <a href="https://dashboard.stripe.com/account/bitcoin/enable" target="_blank">enable the live Bitcoin API on your account</a>'),
                 'value'       => '0'
             ),
-            lang('Bitcoin Address - User Custom Field') => array (
+            lang('Bitcoin Address - User Custom Field') => array(
                 'type'        => 'text',
                 'description' => lang('Create a User Custom Field <a href="index.php?fuse=admin&controller=settings&view=usercustomfields" target="_blank">here</a> that will be used for your customers to enter a Bitcoin Address.</br>Enter in this field the exact same name you used to create the User Custom Field.</br>This will be used in case you need to refund them a Bitcoin Payment.'),
                 'value'       => 'Bitcoin Address'
             ),
-            lang('Stripe Checkout Logo Image URL') => array (
+            lang('Stripe Checkout Logo Image URL') => array(
                 'type'        => 'text',
                 'description' => lang('A relative or absolute URL pointing to a square image of your brand or product.</br>The recommended minimum size is 128x128px.</br>The recommended image types are .gif, .jpeg, and .png.</br>Leave this field empty to use the default image.'),
                 'value'       => ''
             ),
-            lang('Invoice After Signup') => array (
+            lang('Invoice After Signup') => array(
                 'type'        => 'yesno',
                 'description' => lang('Select YES if you want an invoice sent to the customer after signup is complete.'),
                 'value'       => '1'
             ),
-            lang('Signup Name') => array (
+            lang('Signup Name') => array(
                 'type'        => 'text',
                 'description' => lang('Select the name to display in the signup process for this payment type. Example: eCheck or Credit Card.'),
                 'value'       => 'Stripe Checkout'
             ),
-            lang('Dummy Plugin') => array (
+            lang('Dummy Plugin') => array(
                 'type'        => 'hidden',
                 'description' => lang('1 = Only used to specify a billing type for a customer. 0 = full fledged plugin requiring complete functions'),
                 'value'       => '0'
             ),
-            lang('Auto Payment') => array (
+            lang('Auto Payment') => array(
                 'type'        => 'hidden',
                 'description' => lang('No description'),
                 'value'       => '1'
             ),
-            lang('Update Gateway') => array (
+            lang('CC Stored Outside') => array(
+                'type'        => 'hidden',
+                'description' => lang('Is Credit Card stored outside of Clientexec? 1 = YES, 0 = NO'),
+                'value'       => '1'
+            ),
+            lang('Form') => array(
+                'type'        => 'hidden',
+                'description' => lang('Has a form to be loaded?  1 = YES, 0 = NO'),
+                'value'       => '1'
+            ),
+            lang('openHandler') => array(
+                'type'        => 'hidden',
+                'description' => lang('Call openHandler() in "Edit Your Payment Method" section if missing Billing-Profile-ID?  1 = YES, 0 = NO'),
+                'value'       => '1'
+            ),
+            lang('Call on updateGatewayInformation') => array(
+                'type'        => 'hidden',
+                'description' => lang('Function name to be called in this plugin when given conditions are meet while updateGatewayInformation is invoked'),
+                'value'       => serialize(
+                    array(
+                        'function'                      => 'createFullCustomerProfile',
+                        'plugincustomfields conditions' => array( //All conditions must match.
+                            array(
+                                'field name' => 'stripeTokenId', //Supported values are the field names used in form.phtml of the plugin, with name="plugincustomfields[field_name]"
+                                'operator'   => '!=',            //Supported operators are: ==, !=, <, <=, >, >=
+                                'value'      => ''               //The value with which to compare
+                            )
+                        )
+                    )
+                )
+            ),
+            lang('Update Gateway') => array(
                 'type'        => 'hidden',
                 'description' => lang('1 = Create, update or remove Gateway customer information through the function UpdateGateway when customer choose to use this gateway, customer profile is updated, customer is deleted or customer status is changed. 0 = Do nothing.'),
                 'value'       => '1'
-            ),
+            )
         );
         return $variables;
     }
@@ -100,7 +131,7 @@ class PluginStripecheckout extends GatewayPlugin
 
             $profile_id = '';
             $user = new User($params['CustomerID']);
-            if(isset($params['stripeTokenId'])){
+            if(isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != ""){
                 $fullCustomerProfile = $this->createFullCustomerProfile($params);
                 if($fullCustomerProfile['error']){
                     $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$fullCustomerProfile['detail']);
@@ -125,35 +156,41 @@ class PluginStripecheckout extends GatewayPlugin
                     if($Bitcoin_Address_User_Custom_Field != ''){
                         $customer_bitcoin_address = trim($user->customFields->getCustomFieldByName($Bitcoin_Address_User_Custom_Field, true));
                     }
-                    $charge = \Stripe\Refund::create(array(
-                        'refund_address' => $customer_bitcoin_address,
-                        'charge'         => $params['invoiceRefundTransactionId'],
-                        'metadata'       => array(
-                            'order_id' => $params['invoiceNumber']
+                    $charge = \Stripe\Refund::create(
+                        array(
+                            'refund_address' => $customer_bitcoin_address,
+                            'charge'         => $params['invoiceRefundTransactionId'],
+                            'metadata'       => array(
+                                'order_id' => $params['invoiceNumber']
+                            )
                         )
-                    ));
+                    );
                 }else{// ch_ Credit Card
-                    $charge = \Stripe\Refund::create(array(
-                        'charge'   => $params['invoiceRefundTransactionId'],
-                        'metadata' => array(
-                            'order_id' => $params['invoiceNumber']
+                    $charge = \Stripe\Refund::create(
+                        array(
+                            'charge'   => $params['invoiceRefundTransactionId'],
+                            'metadata' => array(
+                                'order_id' => $params['invoiceNumber']
+                            )
                         )
-                    ));
+                    );
                 }
             }else{
                 if($profile_id != ''){
                     //Needs to be in cents
                     $totalAmount = sprintf("%01.2f", round($params["invoiceTotal"], 2)) * 100;
 
-                    $charge = \Stripe\Charge::create(array(
-                        'customer'    => $profile_id,
-                        'amount'      => $totalAmount,
-                        'currency'    => $params['userCurrency'],
-                        'description' => 'Invoice #'.$params['invoiceNumber'],
-                        'metadata'    => array(
-                            'order_id' => $params['invoiceNumber']
+                    $charge = \Stripe\Charge::create(
+                        array(
+                            'customer'    => $profile_id,
+                            'amount'      => $totalAmount,
+                            'currency'    => $params['userCurrency'],
+                            'description' => 'Invoice #'.$params['invoiceNumber'],
+                            'metadata'    => array(
+                                'order_id' => $params['invoiceNumber']
+                            )
                         )
-                    ));
+                    );
                 }else{
                     $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card."));
                     return $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card.");
@@ -251,21 +288,25 @@ class PluginStripecheckout extends GatewayPlugin
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
-            if(isset($params['stripeTokenId'])){
-                $customer = \Stripe\Customer::create(array(
-                    'email' => $params['userEmail'],
-                    'card'  => $params['stripeTokenId']
-                ));
+            if(isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != ""){
+                $customer = \Stripe\Customer::create(
+                    array(
+                        'email' => $params['userEmail'],
+                        'card'  => $params['plugincustomfields']['stripeTokenId']
+                    )
+                );
             }else{
-                $customer = \Stripe\Customer::create(array(
-                    'email' => $params['userEmail'],
-                    'card'  => array(
-                        'number' => $params['userCCNumber'],
-                        'exp_month' => $params['cc_exp_month'],
-                        'exp_year' => $params['cc_exp_year']
-                    ),
-                   'validate' => $validate
-                ));
+                $customer = \Stripe\Customer::create(
+                    array(
+                        'email' => $params['userEmail'],
+                        'card'  => array(
+                            'number' => $params['userCCNumber'],
+                            'exp_month' => $params['cc_exp_month'],
+                            'exp_year' => $params['cc_exp_year']
+                        ),
+                       'validate' => $validate
+                    )
+                );
             }
             $profile_id = $customer->id;
             $Billing_Profile_ID = '';

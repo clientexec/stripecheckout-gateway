@@ -1,13 +1,15 @@
-<input type="hidden" id="stripeTokenId" name="stripeTokenId" value="">
+<input type="hidden" id="stripeTokenId" name="plugincustomfields[stripeTokenId]" value="">
 
 <script data-cfasync="false" src="https://checkout.stripe.com/checkout.js"></script>
-<?php if ( $this->from == 'signup' ) { ?>
-    <a style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large <?php if(@$this->termsConditions) { ?>disabled<?php } ?>" id="customButton"></a>
-<?php } else if ( $this->from == 'invoice' ) { ?>
-    <button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large" id="customButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
+<?php if ($this->from == 'signup') { ?>
+    <a style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large customButton stripecheckoutButton <?php if(@$this->termsConditions) { ?>disabled<?php } ?>" id="customButton"></a>
+<?php } else if ($this->from == 'invoice') { ?>
+    <button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large customButton stripecheckoutButton" id="customButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
+<?php } else if ($this->from == 'paymentmethod') { ?>
+    <button style="margin-left:0px;cursor:pointer;" class="btn btn-large customButton stripecheckoutButton" id="customButton"><?php echo $this->user->lang('Update Credit Card'); ?></button>
 <?php } ?>
 <script data-cfasync="false" type="text/javascript">
-    var handler = StripeCheckout.configure({
+    var stripecheckout_handler = StripeCheckout.configure({
         key: '<?php echo $this->publishableKey; ?>',
         image: '<?php echo $this->logoImage; ?>',
         locale: 'auto',
@@ -15,34 +17,38 @@
             var elem = document.getElementById("stripeTokenId");
             elem.value = token.id;
 
-            <?php if ( $this->from == 'invoice' || $this->from == 'signup' ) { ?>
+            <?php if ($this->from == 'invoice' || $this->from == 'signup') { ?>
                 $('#submitButton').click();
-            <?php } else if ( $this->from == 'paymentmethod' ) { ?>
-                var valid = $('.update-payment-method-frm').parsley( 'validate' );
+            <?php } else if ($this->from == 'paymentmethod') { ?>
+                var valid = $('.update-payment-method-frm').parsley('validate');
                 if (valid) $('.update-payment-method-frm').submit();
             <?php } ?>
         }
     });
 
-    $('#customButton').on('click', function(e) {
-        <?php if ( $this->from == 'signup' ) { ?>
-            if ( $('#submitForm').parsley( 'validate' ) ) {
+    $('.stripecheckoutButton').on('click', function(e) {
+        <?php if ($this->from == 'signup') { ?>
+            if ($('.stripecheckoutButton').hasClass('disabled')) {
+                return;
+            }
+
+            if ($('#submitForm').parsley('validate')) {
         <?php } ?>
 
         // Open Checkout with further options
-        openHandler();
+        stripecheckoutOpenHandler();
 
-        <?php if ( $this->from == 'signup' ) { ?>
+        <?php if ($this->from == 'signup') { ?>
             }
         <?php } ?>
 
         e.preventDefault();
     });
 
-    function openHandler() {
-        handler.open({
-            <?php if ( $this->from == 'paymentmethod' ) { ?>
-                <?php if ( $this->hasBillingProfile ) { ?>
+    function stripecheckoutOpenHandler() {
+        stripecheckout_handler.open({
+            <?php if ($this->from == 'paymentmethod') { ?>
+                <?php if ($this->hasBillingProfile) { ?>
                     name: '<?php echo $this->user->lang("Update your Credit Card?");?>',
                 <?php } else { ?>
                     name: '<?php echo $this->user->lang("Enter your Credit Card");?>',
@@ -51,7 +57,7 @@
                 name: '<?php echo $this->companyName; ?>',
             <?php } ?>
 
-            <?php if ( $this->from == 'signup' ) { ?>
+            <?php if ($this->from == 'signup') { ?>
                 email: document.getElementById("CT_4").value+'<?php echo @$this->user->getEmail(); ?>',
             <?php } else { ?>
                 email: '<?php echo $this->user->getEmail(); ?>',
@@ -60,11 +66,11 @@
             allowrememberme: true,
             panellabel: '<?php echo $this->panelLabel; ?>',
 
-            <?php if ( $this->from == 'invoice' ) { ?>
+            <?php if ($this->from == 'invoice') { ?>
                 description: '<?php echo $this->user->lang("Invoice")." #".$this->invoiceId;?>',
                 amount: '<?php echo $this->invoiceBalanceDue*100;?>',
                 currency: '<?php echo $this->currency;?>',
-            <?php } else if ( $this->from == 'signup' )  { ?>
+            <?php } else if ($this->from == 'signup')  { ?>
                 description: '<?php echo $this->user->lang("New Order");?>',
                 amount: (document.getElementById("totalPay_raw").value * 100),
                 currency: '<?php echo $this->Currency;?>',
@@ -81,6 +87,6 @@
 
     // Close Checkout on page navigation
     $(window).on('popstate', function() {
-        handler.close();
+        stripecheckout_handler.close();
     });
 </script>
