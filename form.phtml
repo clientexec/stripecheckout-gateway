@@ -1,4 +1,4 @@
-<input type="hidden" id="stripeTokenId" name="plugincustomfields[stripeTokenId]" value="">
+<input type="hidden" id="stripeTokenId" name="stripecheckout_plugincustomfields[stripeTokenId]" value="">
 
 <script data-cfasync="false" src="https://checkout.stripe.com/checkout.js"></script>
 <?php if ($this->from == 'signup') { ?>
@@ -8,6 +8,7 @@
 <?php } else if ($this->from == 'paymentmethod') { ?>
     <button style="margin-left:0px;cursor:pointer;" class="btn btn-large customButton stripecheckoutButton" id="customButton"><?php echo $this->user->lang('Update Credit Card'); ?></button>
 <?php } ?>
+
 <script data-cfasync="false" type="text/javascript">
     var stripecheckout_handler = StripeCheckout.configure({
         key: '<?php echo $this->publishableKey; ?>',

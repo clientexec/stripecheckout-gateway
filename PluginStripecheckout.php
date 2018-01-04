@@ -120,7 +120,7 @@ class PluginStripecheckout extends GatewayPlugin
         if (isset($params['refund']) && $params['refund']) {
             $isRefund = true;
             $cPlugin->setAction('refund');
-        }else{
+        } else {
             $isRefund = false;
             $cPlugin->setAction('charge');
         }
@@ -131,29 +131,29 @@ class PluginStripecheckout extends GatewayPlugin
 
             $profile_id = '';
             $user = new User($params['CustomerID']);
-            if(isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != ""){
+            if (isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != "") {
                 $fullCustomerProfile = $this->createFullCustomerProfile($params);
-                if($fullCustomerProfile['error']){
+                if ($fullCustomerProfile['error']) {
                     $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$fullCustomerProfile['detail']);
                     return $this->user->lang("There was an error performing this operation.")." ".$fullCustomerProfile['detail'];
                 }
                 $profile_id = $fullCustomerProfile['profile_id'];
-            }else{
+            } else {
                 $Billing_Profile_ID = '';
-                if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
+                if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                     $profile_id_array = unserialize($Billing_Profile_ID);
-                    if(is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])){
+                    if (is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])) {
                         $profile_id = $profile_id_array['stripecheckout'];
                     }
                 }
             }
 
-            if ($isRefund){
+            if ($isRefund) {
                 $BitcoinOrCC = substr($params['invoiceRefundTransactionId'], 0, 3);
-                if($BitcoinOrCC == 'py_'){// py_ Bitcoin
+                if ($BitcoinOrCC == 'py_') {// py_ Bitcoin
                     $customer_bitcoin_address = '';
                     $Bitcoin_Address_User_Custom_Field = trim($this->settings->get('plugin_stripecheckout_Bitcoin Address - User Custom Field'));
-                    if($Bitcoin_Address_User_Custom_Field != ''){
+                    if ($Bitcoin_Address_User_Custom_Field != '') {
                         $customer_bitcoin_address = trim($user->customFields->getCustomFieldByName($Bitcoin_Address_User_Custom_Field, true));
                     }
                     $charge = \Stripe\Refund::create(
@@ -165,7 +165,7 @@ class PluginStripecheckout extends GatewayPlugin
                             )
                         )
                     );
-                }else{// ch_ Credit Card
+                } else {// ch_ Credit Card
                     $charge = \Stripe\Refund::create(
                         array(
                             'charge'   => $params['invoiceRefundTransactionId'],
@@ -175,8 +175,8 @@ class PluginStripecheckout extends GatewayPlugin
                         )
                     );
                 }
-            }else{
-                if($profile_id != ''){
+            } else {
+                if ($profile_id != '') {
                     //Needs to be in cents
                     $totalAmount = sprintf("%01.2f", round($params["invoiceTotal"], 2)) * 100;
 
@@ -191,7 +191,7 @@ class PluginStripecheckout extends GatewayPlugin
                             )
                         )
                     );
-                }else{
+                } else {
                     $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card."));
                     return $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card.");
                 }
@@ -199,30 +199,30 @@ class PluginStripecheckout extends GatewayPlugin
 
             $charge = $charge->__toArray(true);
 
-            if($charge['failure_message'] == ''){
-                if($charge['object'] == 'charge'){
+            if ($charge['failure_message'] == '') {
+                if ($charge['object'] == 'charge') {
                     $cPlugin->setTransactionID($charge['id']);
-                        if ( $charge['paid'] == true && in_array($charge['status'], array('succeeded', 'paid')) ) {
+                        if ($charge['paid'] == true && in_array($charge['status'], array('succeeded', 'paid'))) {
                             $chargeAmount = sprintf("%01.2f", round(($charge['amount'] / 100), 2));
                             $cPlugin->PaymentAccepted($chargeAmount, "Stripe Checkout payment of {$chargeAmount} was accepted.", $charge['id']);
                             return '';
-                        }else{
+                        } else {
                             $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation."));
                             return $this->user->lang("There was an error performing this operation.");
                         }
-                }elseif($charge['object'] == 'refund'){
+                } elseif ($charge['object'] == 'refund') {
                     $chargeAmount = sprintf("%01.2f", round(($charge['amount'] / 100), 2));
                     $cPlugin->PaymentAccepted($chargeAmount, "Stripe Checkout refund of {$chargeAmount} was successfully processed.", $charge['id']);
                     return array('AMOUNT' => $chargeAmount);
-                }else{
+                } else {
                     $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation."));
                     return $this->user->lang("There was an error performing this operation.");
                 }
-            }else{
+            } else {
                 $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$charge['failure_message']);
                 return $this->user->lang("There was an error performing this operation.")." ".$charge['failure_message'];
             }
-        } catch(\Stripe\Error\Card $e) {
+        } catch (\Stripe\Error\Card $e) {
             $body = $e->getJsonBody();
             $err  = $body['error'];
 
@@ -280,22 +280,39 @@ class PluginStripecheckout extends GatewayPlugin
     function createFullCustomerProfile($params)
     {
         $validate = true;
-        if ( $params['validate'] === false ) {
+        if ($params['validate'] === false) {
           $validate = false;
         }
-        
+
         try {
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
-            if(isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != ""){
-                $customer = \Stripe\Customer::create(
-                    array(
-                        'email' => $params['userEmail'],
-                        'card'  => $params['plugincustomfields']['stripeTokenId']
-                    )
-                );
-            }else{
+            if (isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != "") {
+                $profile_id = '';
+                $Billing_Profile_ID = '';
+                $profile_id_array = array();
+                $user = new User($params['CustomerID']);
+                if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
+                    $profile_id_array = unserialize($Billing_Profile_ID);
+                    if (is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])) {
+                        $profile_id = $profile_id_array['stripecheckout'];
+                    }
+                }
+
+                if ($profile_id != '') {
+                    $customer = \Stripe\Customer::retrieve($profile_id);
+                    $customer->source = $params['plugincustomfields']['stripeTokenId'];
+                    $customer->save();
+                } else {
+                    $customer = \Stripe\Customer::create(
+                        array(
+                            'email' => $params['userEmail'],
+                            'card'  => $params['plugincustomfields']['stripeTokenId']
+                        )
+                    );
+                }
+            } else {
                 $customer = \Stripe\Customer::create(
                     array(
                         'email' => $params['userEmail'],
@@ -312,10 +329,10 @@ class PluginStripecheckout extends GatewayPlugin
             $Billing_Profile_ID = '';
             $profile_id_array = array();
             $user = new User($params['CustomerID']);
-            if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
+            if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                 $profile_id_array = unserialize($Billing_Profile_ID);
             }
-            if(!is_array($profile_id_array)){
+            if (!is_array($profile_id_array)) {
                 $profile_id_array = array();
             }
             $profile_id_array['stripecheckout'] = $profile_id;
@@ -326,7 +343,7 @@ class PluginStripecheckout extends GatewayPlugin
                 'error'               => false,
                 'profile_id'          => $profile_id
             );
-        } catch(\Stripe\Error\Card $e) {
+        } catch (\Stripe\Error\Card $e) {
             $body = $e->getJsonBody();
             $err  = $body['error'];
 
@@ -395,7 +412,7 @@ class PluginStripecheckout extends GatewayPlugin
     }
 
     function UpdateGateway($params){
-        switch($params['Action']){
+        switch ($params['Action']) {
             case 'update':  // When updating customer profile or changing to use this gateway
                 $statusAliasGateway = StatusAliasGateway::getInstance($this->user);
                 if(in_array($params['Status'], $statusAliasGateway->getUserStatusIdsFor(array(USER_STATUS_INACTIVE, USER_STATUS_CANCELLED, USER_STATUS_FRAUD)))){
@@ -418,22 +435,22 @@ class PluginStripecheckout extends GatewayPlugin
             $Billing_Profile_ID = '';
             $profile_id_array = array();
             $user = new User($params['User ID']);
-            if($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
+
+            if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                 $profile_id_array = unserialize($Billing_Profile_ID);
-                if(is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])){
+                if (is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])) {
                     $profile_id = $profile_id_array['stripecheckout'];
                 }
             }
 
-            if($profile_id != ''){
+            if ($profile_id != '') {
                 $customer = \Stripe\Customer::retrieve($profile_id);
                 $customer = $customer->delete();
 
-                if($customer->id == $profile_id && $customer->deleted == true){
-
-                    if(is_array($profile_id_array)){
+                if ($customer->id == $profile_id && $customer->deleted == true) {
+                    if (is_array($profile_id_array)) {
                         unset($profile_id_array['stripecheckout']);
-                    }else{
+                    } else {
                         $profile_id_array = array();
                     }
 
@@ -444,20 +461,20 @@ class PluginStripecheckout extends GatewayPlugin
                         'error'      => false,
                         'profile_id' => $profile_id
                     );
-                }else{
+                } else {
                     return array(
                         'error'  => true,
                         'detail' => $this->user->lang("There was an error performing this operation.")
                     );
                 }
-            }else{
+            } else {
                 return array(
                     'error'  => true,
                     'detail' => $this->user->lang("There was an error performing this operation.").' '.$this->user->lang("The customer hasn't stored their credit card.")
                 );
             }
 
-        } catch(\Stripe\Error\Card $e) {
+        } catch (\Stripe\Error\Card $e) {
             $body = $e->getJsonBody();
             $err  = $body['error'];
 
@@ -539,19 +556,19 @@ class PluginStripecheckout extends GatewayPlugin
         $this->view->from = $args['from'];
         $this->view->termsConditions = $args['termsConditions'];
 
-        if ( $args['from'] == 'paymentmethod' ) {
+        if ($args['from'] == 'paymentmethod') {
             $this->view->acceptBitcoins = 'false';
-
             $Billing_Profile_ID = '';
-            if($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != ''){
+
+            if ($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                 $profile_id_array = unserialize($Billing_Profile_ID);
-                if(is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])){
+                if (is_array($profile_id_array) && isset($profile_id_array['stripecheckout'])) {
                     $this->view->hasBillingProfile = true;
                 }
             }
         }
 
-        if($this->view->logoImage == ''){
+        if ($this->view->logoImage == '') {
             $SoftwareURL = mb_substr(CE_Lib::getSoftwareURL(),-1,1) == "//" ? CE_Lib::getSoftwareURL() : CE_Lib::getSoftwareURL()."/";
             $this->view->logoImage = $SoftwareURL.'plugins/gateways/stripecheckout/logo.png';
         }
