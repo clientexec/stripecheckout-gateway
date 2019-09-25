@@ -1,12 +1,15 @@
 <input type="hidden" id="stripeTokenId" name="stripecheckout_plugincustomfields[stripeTokenId]" value="">
 
 <script data-cfasync="false" src="https://checkout.stripe.com/checkout.js"></script>
+
 <?php if ($this->from == 'signup') { ?>
-    <a style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large customButton stripecheckoutButton <?php if(@$this->termsConditions) { ?>disabled<?php } ?>" id="customButton"></a>
-<?php } else if ($this->from == 'invoice') { ?>
-    <button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-large customButton stripecheckoutButton" id="customButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
-<?php } else if ($this->from == 'paymentmethod') { ?>
-    <button style="margin-left:0px;cursor:pointer;" class="btn btn-large customButton stripecheckoutButton" id="customButton"><?php echo $this->user->lang('Update Credit Card'); ?></button>
+    <a style="margin-left:0px;cursor:pointer;" class="btn-success btn btn-lg customButton center-on-mobile stripecheckoutButton <?php if (@$this->termsConditions) {
+?>disabled<?php
+} ?>" id="customButton"></a>
+<?php } elseif ($this->from == 'invoice') { ?>
+    <button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-default btn-lg customButton stripecheckoutButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
+<?php } elseif ($this->from == 'paymentmethod') { ?>
+    <button style="margin-left:0px;cursor:pointer;" class="btn btn-primary customButton stripecheckoutButton" id="customButton"><?php echo $this->user->lang('Update Credit Card'); ?></button>
 <?php } ?>
 
 <script data-cfasync="false" type="text/javascript">
@@ -20,7 +23,7 @@
 
             <?php if ($this->from == 'invoice' || $this->from == 'signup') { ?>
                 $('#submitButton').click();
-            <?php } else if ($this->from == 'paymentmethod') { ?>
+            <?php } elseif ($this->from == 'paymentmethod') { ?>
                 var valid = $('.update-payment-method-frm').parsley('validate');
                 if (valid) $('.update-payment-method-frm').submit();
             <?php } ?>
@@ -33,7 +36,35 @@
                 return;
             }
 
-            if ($('#submitForm').parsley('validate')) {
+            var password_validated = true;
+
+            <?php if (!$this->loggedIn) { ?>
+                $('.parsley-error-list.help-block').parent().removeClass('has-error');
+                $('.parsley-error-list.help-block').remove();
+                e.preventDefault();
+
+                //let's validate remote data
+                if ($('#password').length > 0) {
+                    if ($.trim($('#password').val()) == "") return;
+                    $.ajax({
+                        type: "POST",
+                        data: {"password": $('#password').val()},
+                        url: 'index.php?controller=signup&fuse=admin&action=testpasswordstrength',
+                        async: false,
+                        success : function(response) {
+                            json = ce.parseResponse(response);
+                            if (!json.valid) {
+                                password_validated = false;
+                                $('#password').parent().addClass('has-error');
+                                $('#password').after('<span class="help-block parsley-error-list">'+json.errorMessage+'</span>');
+                                $('#password').get(0).scrollIntoView();
+                            }
+                        }
+                    });
+                }
+            <?php } ?>
+
+            if (password_validated && $('#submitForm').parsley('validate')) {
         <?php } ?>
 
         // Open Checkout with further options
@@ -55,7 +86,13 @@
                     name: '<?php echo $this->user->lang("Enter your Credit Card");?>',
                 <?php } ?>
             <?php } else { ?>
-                name: '<?php echo $this->companyName; ?>',
+                <?php
+                    $companyName = '';
+                    if (isset($this->companyName) && $this->companyName != '') {
+                        $companyName = str_replace("'", "\\'", $this->companyName);
+                    }
+                ?>
+                name: '<?php echo $companyName; ?>',
             <?php } ?>
 
             <?php if ($this->from == 'signup') { ?>
@@ -64,25 +101,24 @@
                 email: '<?php echo $this->user->getEmail(); ?>',
             <?php } ?>
 
-            allowrememberme: true,
-            panellabel: '<?php echo $this->panelLabel; ?>',
+            allowRememberMe: true,
+            panelLabel: '<?php echo $this->panelLabel; ?>',
 
             <?php if ($this->from == 'invoice') { ?>
                 description: '<?php echo $this->user->lang("Invoice")." #".$this->invoiceId;?>',
                 amount: '<?php echo $this->invoiceBalanceDue*100;?>',
                 currency: '<?php echo $this->currency;?>',
-            <?php } else if ($this->from == 'signup')  { ?>
+            <?php } elseif ($this->from == 'signup') {   ?>
                 description: '<?php echo $this->user->lang("New Order");?>',
-                amount: (document.getElementById("totalPay_raw").value * 100),
+                amount: Math.round(document.getElementById("totalPay_raw").value * 100),
                 currency: '<?php echo $this->Currency;?>',
             <?php } ?>
 
-            billingaddress: false,
-            shippingaddress: false,
-            zipcode: false,
-            bitcoin: <?php echo $this->acceptBitcoins; ?>,
+            billingAddress: true,
+            shippingAddress: false,
+            zipCode: true,
             alipay: false,
-            alipayreusable: false
+            alipayReusable: false
         });
     }
 
