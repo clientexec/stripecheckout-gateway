@@ -543,6 +543,13 @@ class PluginStripecheckout extends GatewayPlugin
                     }
                 }
 
+                if ($customer === null) {
+                    return array(
+                      'error'  => true,
+                        'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("User does not exist.")
+                    );
+                }
+
                 $customer = $customer->delete();
 
                 if ($customer->id == $profile_id && $customer->deleted == true) {
@@ -732,6 +739,9 @@ class PluginStripecheckout extends GatewayPlugin
         if ($this->getVariable('Stripe Checkout Gateway Publishable Key') == '') {
             return '';
         }
+
+        $this->view->from = $params['from'];
+
         switch ($params['from']) {
             case 'paymentmethod':
                 $this->view->hasBillingProfile = false;
@@ -742,7 +752,6 @@ class PluginStripecheckout extends GatewayPlugin
                 $this->view->currency = $params['currency'];
                 $this->view->invoiceBalanceDue = $params['invoiceBalanceDue'];
                 $this->view->panelLabel = $params['panellabel'];
-                $this->view->from = $params['from'];
                 $this->view->termsConditions = $params['termsConditions'];
 
                 $Billing_Profile_ID = '';
