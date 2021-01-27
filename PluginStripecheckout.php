@@ -33,7 +33,7 @@ class PluginStripecheckout extends GatewayPlugin
             ),
             lang('Invoice After Signup') => array(
                 'type'        => 'yesno',
-                'description' => lang('Select YES if you want an invoice sent to the customer after signup is complete.'),
+                'description' => lang('Select YES if you want an invoice sent to the client after signup is complete.'),
                 'value'       => '1'
             ),
             lang('Signup Name') => array(
@@ -43,7 +43,7 @@ class PluginStripecheckout extends GatewayPlugin
             ),
             lang('Dummy Plugin') => array(
                 'type'        => 'hidden',
-                'description' => lang('1 = Only used to specify a billing type for a customer. 0 = full fledged plugin requiring complete functions'),
+                'description' => lang('1 = Only used to specify a billing type for a client. 0 = full fledged plugin requiring complete functions'),
                 'value'       => '0'
             ),
             lang('Auto Payment') => array(
@@ -89,7 +89,7 @@ class PluginStripecheckout extends GatewayPlugin
             ),
             lang('Update Gateway') => array(
                 'type'        => 'hidden',
-                'description' => lang('1 = Create, update or remove Gateway customer information through the function UpdateGateway when customer choose to use this gateway, customer profile is updated, customer is deleted or customer status is changed. 0 = Do nothing.'),
+                'description' => lang('1 = Create, update or remove Gateway client information through the function UpdateGateway when client choose to use this gateway, client profile is updated, client is deleted or client status is changed. 0 = Do nothing.'),
                 'value'       => '1'
             )
         );
@@ -218,6 +218,7 @@ class PluginStripecheckout extends GatewayPlugin
                             ),
                             'customer'             => $params['profile_id'],
                             'payment_method'       => $params['payment_method'],
+                            'description'          => 'Invoice #'.$params['invoiceNumber'],
                             'off_session'          => true,
                             'confirm'              => true
                         )

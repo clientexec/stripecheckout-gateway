@@ -19,32 +19,23 @@ class PluginStripecheckoutCallback extends PluginCallback
 
         // Use Stripe's bindings...
         \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
-
-        $events = \Stripe\Event::all(
-            array(
-                'type'    => 'checkout.session.completed',
-                'created' => array(
-                    // Check for events created in the last 24 hours.
-                    'gte' => time() - 24 * 60 * 60,
-                )
-            )
-        );
+        $stripe = new \Stripe\StripeClient($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
         $session = false;
-
-        foreach ($events->autoPagingIterator() as $event) {
-            $session = $event->data->object;
-
-            // Fulfill the purchase...
-            if ($session->id == $_GET['session_id']) {
-                break;
-            } else {
-                $session = false;
-            }
+        try {
+            $session = $stripe->checkout->sessions->retrieve(
+                $_GET['session_id'],
+                []
+            );
+        } catch (Exception $e) {
+            CE_Lib::log(4, "Invalid Checkout Session: " . $e->getMessage());
+            $this->redirect();
         }
 
+        $lineItems = $stripe->checkout->sessions->allLineItems($_GET['session_id'], ['limit' => 5]);
+        $invoiceId = substr($lineItems->data[0]->description, 9);
+
         if ($session !== false) {
-            $invoiceId = substr($session->display_items[0]->custom->name, 9);
             $payment_intent = \Stripe\PaymentIntent::retrieve($session->payment_intent);
             $transactionId = $payment_intent->charges->data[0]->balance_transaction;
             $amount = sprintf("%01.2f", round(($payment_intent->charges->data[0]->amount / 100), 2));
@@ -104,23 +95,29 @@ class PluginStripecheckoutCallback extends PluginCallback
                 $cPlugin->PaymentRejected("Stripe Checkout payment of {$amount} was rejected. (Transaction ID: {$transactionId})");
                 header('Location: '.$cancel_url);
             }
+            exit;
         } else {
-            $clientExecURL = CE_Lib::getSoftwareURL();
-            $invoiceviewURLCancel = $clientExecURL."/index.php?fuse=billing&cancel=1&controller=invoice&view=allinvoices";
-
-            //Need to check to see if user is coming from signup
-            if ($_GET['isSignup']) {
-                // Actually handle the signup URL setting
-                if ($this->settings->get('Signup Completion URL') != '') {
-                    $cancel_url = $this->settings->get('Signup Completion URL');
-                } else {
-                    $cancel_url = $clientExecURL."/order.php?step=3";
-                }
-            } else {
-                $cancel_url = $invoiceviewURLCancel;
-            }
-
-            header('Location: '.$cancel_url);
+            $this->redirect();
         }
+    }
+
+    private function redirect()
+    {
+        $clientExecURL = CE_Lib::getSoftwareURL();
+        $invoiceviewURLCancel = $clientExecURL."/index.php?fuse=billing&cancel=1&controller=invoice&view=allinvoices";
+
+        //Need to check to see if user is coming from signup
+        if ($_GET['isSignup']) {
+            // Actually handle the signup URL setting
+            if ($this->settings->get('Signup Completion URL') != '') {
+                $cancel_url = $this->settings->get('Signup Completion URL');
+            } else {
+                $cancel_url = $clientExecURL."/order.php?step=3";
+            }
+        } else {
+            $cancel_url = $invoiceviewURLCancel;
+        }
+        header('Location: '.$cancel_url);
+        exit;
     }
 }
