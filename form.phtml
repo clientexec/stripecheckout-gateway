@@ -3,11 +3,11 @@
 <script data-cfasync="false" src="https://checkout.stripe.com/checkout.js"></script>
 
 <?php if ($this->from == 'signup') { ?>
-    <a style="margin-left:0px;cursor:pointer;" class="btn-success btn btn-lg customButton center-on-mobile stripecheckoutButton <?php if (@$this->termsConditions) {
+    <a style="margin-left:0px;cursor:pointer;" class="app-btns primary customButton center-on-mobile stripecheckoutButton <?php if (@$this->termsConditions) {
 ?>disabled<?php
 } ?>" id="customButton"></a>
 <?php } elseif ($this->from == 'invoice') { ?>
-    <button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-default btn-lg customButton stripecheckoutButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
+    <button class="app-btns primary customButton stripecheckoutButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
 <?php } elseif ($this->from == 'paymentmethod') { ?>
     <button style="margin-left:0px;cursor:pointer;" class="btn btn-primary customButton stripecheckoutButton" id="customButton"><?php echo $this->user->lang('Update Credit Card'); ?></button>
 <?php } ?>

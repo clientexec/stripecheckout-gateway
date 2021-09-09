@@ -16,14 +16,14 @@ class PluginStripecheckout extends GatewayPlugin
                 'description' => lang('How CE sees this plugin ( not to be confused with the Signup Name )'),
                 'value'       => 'Stripe Checkout'
             ),
-            lang('Stripe Checkout Gateway Secret Key') => array(
-                'type'        => 'password',
-                'description' => lang('Please enter your Stripe Checkout Gateway Secret Key here.'),
-                'value'       => ''
-            ),
             lang('Stripe Checkout Gateway Publishable Key') => array(
                 'type'        => 'password',
                 'description' => lang('Please enter your Stripe Checkout Gateway Publishable Key here.'),
+                'value'       => ''
+            ),
+            lang('Stripe Checkout Gateway Secret Key') => array(
+                'type'        => 'password',
+                'description' => lang('Please enter your Stripe Checkout Gateway Secret Key here.'),
                 'value'       => ''
             ),
             lang('Stripe Checkout Logo Image URL') => array(
@@ -715,7 +715,7 @@ class PluginStripecheckout extends GatewayPlugin
         $publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
         $sessionId = $session->id;
 
-        $strRet = '<script src="https://js.stripe.com/v3/"></script>'
+        $strRet = '<script data-cfasync="false" src="https://js.stripe.com/v3/"></script>'
             .'<script data-cfasync="false" type="text/javascript">'
             .'    var stripe = Stripe("'.$publishableKey.'");'
             // Open Checkout with further options
@@ -774,7 +774,7 @@ class PluginStripecheckout extends GatewayPlugin
                 return $this->view->render('form.phtml');
                 break;
             case 'signup':
-                $fakeForm = '<a style="margin-left:0px;cursor:pointer;" class="btn-success btn btn-lg customButton center-on-mobile '.((isset($params['termsConditions']) && $params['termsConditions'])? 'disabled' : '').'" onclick="cart.submit_form('.$params['loggedIn'].');"  id="submitButton"></a>';
+                $fakeForm = '<a style="margin-left:0px;cursor:pointer;" class="app-btns primary customButton center-on-mobile" onclick="cart.submit_form('.$params['loggedIn'].');"  id="submitButton"></a>';
 
                 return $fakeForm;
                 break;
@@ -792,57 +792,61 @@ class PluginStripecheckout extends GatewayPlugin
                 $urlFix = mb_substr(CE_Lib::getSoftwareURL(), -1, 1) == "//" ? '' : '/';
                 $callbackUrl = CE_Lib::getSoftwareURL().$urlFix.'plugins/gateways/'.basename(dirname(__FILE__)).'/callback.php?isSignup='.$isSignup.'&session_id={CHECKOUT_SESSION_ID}';
 
-                // Use Stripe's bindings...
-                \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+                try {
+                    // Use Stripe's bindings...
+                    \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
-                $sessionParams = array(
-                    'payment_method_types' => array(
-                        'card'
-                    ),
-                    'line_items'           => array(
-                        array(
-                            'name'        => 'Invoice #'.$params['invoiceId'],
-                            'description' => 'Invoice #'.$params['invoiceId'],
-                            'amount'      => $totalAmountCents,
-                            'currency'    => $params['currency'],
-                            'quantity'    => 1,
-                        )
-                    ),
-                    //Set payment_intent off_session
-                    'payment_intent_data'  => array(
-                        'setup_future_usage' => 'off_session',
-                    ),
-                    'success_url'          => $callbackUrl,
-                    'cancel_url'           => $callbackUrl
-                );
+                    $sessionParams = array(
+                        'payment_method_types' => array(
+                            'card'
+                        ),
+                        'line_items'           => array(
+                            array(
+                                'name'        => 'Invoice #'.$params['invoiceId'],
+                                'description' => 'Invoice #'.$params['invoiceId'],
+                                'amount'      => $totalAmountCents,
+                                'currency'    => $params['currency'],
+                                'quantity'    => 1,
+                            )
+                        ),
+                        //Set payment_intent off_session
+                        'payment_intent_data'  => array(
+                            'setup_future_usage' => 'off_session',
+                        ),
+                        'success_url'          => $callbackUrl,
+                        'cancel_url'           => $callbackUrl
+                    );
 
-                $profile_id = '';
-                $Billing_Profile_ID = '';
+                    $profile_id = '';
+                    $Billing_Profile_ID = '';
 
-                if ($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
-                    $profile_id_array = unserialize($Billing_Profile_ID);
+                    if ($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
+                        $profile_id_array = unserialize($Billing_Profile_ID);
 
-                    if (is_array($profile_id_array) && isset($profile_id_array[basename(dirname(__FILE__))])) {
-                        $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                        if (is_array($profile_id_array) && isset($profile_id_array[basename(dirname(__FILE__))])) {
+                            $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                        }
                     }
+
+                    $profile_id_values_array = explode('|', $profile_id);
+                    $profile_id = $profile_id_values_array[0];
+
+                    if ($profile_id != '') {
+                        $sessionParams['customer'] = $profile_id;
+                    } else {
+                        $sessionParams['customer_email'] = $this->user->getEmail();
+                    }
+
+                    $session = \Stripe\Checkout\Session::create($sessionParams);
+
+                    $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+                    $this->view->sessionId = $session->id;
+
+                    return $this->view->render('sca.phtml');
+                    break;
+                } catch (Exception $e) {
+                    return '';
                 }
-
-                $profile_id_values_array = explode('|', $profile_id);
-                $profile_id = $profile_id_values_array[0];
-
-                if ($profile_id != '') {
-                    $sessionParams['customer'] = $profile_id;
-                } else {
-                    $sessionParams['customer_email'] = $this->user->getEmail();
-                }
-
-                $session = \Stripe\Checkout\Session::create($sessionParams);
-
-                $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
-                $this->view->sessionId = $session->id;
-
-                return $this->view->render('sca.phtml');
-                break;
         }
     }
 }

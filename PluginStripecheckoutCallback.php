@@ -92,7 +92,10 @@ class PluginStripecheckoutCallback extends PluginCallback
                 $cPlugin->PaymentAccepted($amount, "Stripe Checkout payment of {$amount} was accepted. (Transaction ID: {$transactionId})", $transactionId);
                 header('Location: '.$return_url);
             } else {
-                $cPlugin->PaymentRejected("Stripe Checkout payment of {$amount} was rejected. (Transaction ID: {$transactionId})");
+                if (isset($transactionId)) {
+                    $cPlugin->PaymentRejected("Stripe Checkout payment of {$amount} was rejected. (Transaction ID: {$transactionId})");
+                }
+                
                 header('Location: '.$cancel_url);
             }
             exit;

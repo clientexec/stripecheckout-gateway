@@ -1,11 +1,9 @@
-<script src="https://js.stripe.com/v3/"></script>
+<script data-cfasync="false" src="https://js.stripe.com/v3/"></script>
 
 <?php if ($this->from == 'signup') { ?>
-    <a style="margin-left:0px;cursor:pointer;" class="btn-success btn btn-lg customButton center-on-mobile stripecheckoutButton <?php if (@$this->termsConditions) {
-?>disabled<?php
-} ?>" id="customButton"></a>
+    <a style="margin-left:0px;cursor:pointer;" class="btn-success btn btn-lg customButton center-on-mobile stripecheckoutButton" id="customButton"></a>
 <?php } elseif ($this->from == 'invoice') { ?>
-    <button style="margin-left:0px;cursor:pointer;" class="pull-right btn btn-default btn-lg customButton stripecheckoutButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
+    <button class="app-btns primary customButton stripecheckoutButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
 <?php } ?>
 
 <script data-cfasync="false" type="text/javascript">
