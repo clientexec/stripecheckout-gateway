@@ -52,7 +52,7 @@
                         url: 'index.php?controller=signup&fuse=admin&action=testpasswordstrength',
                         async: false,
                         success : function(response) {
-                            json = ce.parseResponse(response);
+                            json = clientexec.parseResponse(response);
                             if (!json.valid) {
                                 password_validated = false;
                                 $('#password').parent().addClass('has-error');
@@ -78,6 +78,18 @@
     });
 
     function stripecheckoutOpenHandler() {
+        <?php if ($this->from == 'signup') { ?>
+            var email = '';
+
+            <?php if (!$this->loggedIn) { ?>
+                var CT_4 = document.getElementById('CT_4');
+
+                if(typeof CT_4 !== null && CT_4 !== 'undefined' ) {
+                    email = CT_4.value;
+                }
+            <?php } ?>
+        <?php } ?>
+
         stripecheckout_handler.open({
             <?php if ($this->from == 'paymentmethod') { ?>
                 <?php if ($this->hasBillingProfile) { ?>
@@ -96,7 +108,7 @@
             <?php } ?>
 
             <?php if ($this->from == 'signup') { ?>
-                email: document.getElementById("CT_4").value+'<?php echo @$this->user->getEmail(); ?>',
+                email: email+'<?php echo @$this->user->getEmail(); ?>',
             <?php } else { ?>
                 email: '<?php echo $this->user->getEmail(); ?>',
             <?php } ?>

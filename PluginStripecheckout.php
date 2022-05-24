@@ -26,6 +26,11 @@ class PluginStripecheckout extends GatewayPlugin
                 'description' => lang('Please enter your Stripe Checkout Gateway Secret Key here.'),
                 'value'       => ''
             ),
+            lang('Delete Client From Gateway') => array(
+                'type'        => 'yesno',
+                'description' => lang('Select YES if you want to delete the client from the gateway when the client changes the payment method or is deleted.'),
+                'value'       => '0'
+            ),
             lang('Stripe Checkout Logo Image URL') => array(
                 'type'        => 'text',
                 'description' => lang('A relative or absolute URL pointing to a square image of your brand or product.</br>The recommended minimum size is 128x128px.</br>The recommended image types are .gif, .jpeg, and .png.</br>Leave this field empty to use the default image.'),
@@ -121,8 +126,14 @@ class PluginStripecheckout extends GatewayPlugin
         }
 
         try {
-            // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+            \Stripe\Stripe::setAppInfo(
+                'Clientexec',
+                CE_Lib::getAppVersion(),
+                'https://www.clientexec.com',
+                STRIPE_PARTNER_ID
+            );
+            \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
 
             $profile_id = '';
             $payment_method = '';
@@ -178,6 +189,16 @@ class PluginStripecheckout extends GatewayPlugin
                     if ($profile_id != '') {
                         try {
                             $customer = \Stripe\Customer::retrieve($profile_id);
+                            $customer->name = $params["userFirstName"].' '.$params["userLastName"];
+                            $customer->phone = $params['userPhone'];
+                            $customer->address = array(
+                                'line1'       => $params["userAddress"],
+                                'postal_code' => $params["userZipcode"],
+                                'city'        => $params["userCity"],
+                                'state'       => $params["userState"],
+                                'country'     => $params["userCountry"]
+                            );
+                            $customer->save();
                             $payment_method = $customer->default_source;
                         } catch (Exception $e) {
                             $profile_id = '';
@@ -334,6 +355,13 @@ class PluginStripecheckout extends GatewayPlugin
         try {
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+            \Stripe\Stripe::setAppInfo(
+                'Clientexec',
+                CE_Lib::getAppVersion(),
+                'https://www.clientexec.com',
+                STRIPE_PARTNER_ID
+            );
+            \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
 
             if (isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != "") {
                 $profile_id = '';
@@ -353,21 +381,48 @@ class PluginStripecheckout extends GatewayPlugin
 
                 if ($profile_id != '') {
                     $customer = \Stripe\Customer::retrieve($profile_id);
+                    $customer->name = $params["userFirstName"].' '.$params["userLastName"];
+                    $customer->phone = $params['userPhone'];
+                    $customer->address = array(
+                        'line1'       => $params["userAddress"],
+                        'postal_code' => $params["userZipcode"],
+                        'city'        => $params["userCity"],
+                        'state'       => $params["userState"],
+                        'country'     => $params["userCountry"]
+                    );
                     $customer->source = $params['plugincustomfields']['stripeTokenId'];
                     $customer->save();
                 } else {
                     $customer = \Stripe\Customer::create(
                         array(
-                            'email' => $params['userEmail'],
-                            'card'  => $params['plugincustomfields']['stripeTokenId']
+                            'name'    => $params["userFirstName"].' '.$params["userLastName"],
+                            'address' => array(
+                                'line1'       => $params["userAddress"],
+                                'postal_code' => $params["userZipcode"],
+                                'city'        => $params["userCity"],
+                                'state'       => $params["userState"],
+                                'country'     => $params["userCountry"]
+                            ),
+                            'email'   => $params['userEmail'],
+                            'phone'   => $params['userPhone'],
+                            'card'    => $params['plugincustomfields']['stripeTokenId']
                         )
                     );
                 }
             } else {
                 $customer = \Stripe\Customer::create(
                     array(
-                        'email' => $params['userEmail'],
-                        'card'  => array(
+                        'name'    => $params["userFirstName"].' '.$params["userLastName"],
+                        'address' => array(
+                            'line1'       => $params["userAddress"],
+                            'postal_code' => $params["userZipcode"],
+                            'city'        => $params["userCity"],
+                            'state'       => $params["userState"],
+                            'country'     => $params["userCountry"]
+                        ),
+                        'email'   => $params['userEmail'],
+                        'phone'   => $params['userPhone'],
+                        'card'    => array(
                             'number'          => $params['userCCNumber'],
                             'exp_month'       => $params['cc_exp_month'],
                             'exp_year'        => $params['cc_exp_year'],
@@ -495,6 +550,13 @@ class PluginStripecheckout extends GatewayPlugin
 
             // Use Stripe's bindings...
             \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+            \Stripe\Stripe::setAppInfo(
+                'Clientexec',
+                CE_Lib::getAppVersion(),
+                'https://www.clientexec.com',
+                STRIPE_PARTNER_ID
+            );
+            \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
 
             $profile_id = '';
             $Billing_Profile_ID = '';
@@ -514,10 +576,75 @@ class PluginStripecheckout extends GatewayPlugin
             }
 
             if ($profile_id != '') {
-                try {
-                    $customer = \Stripe\Customer::retrieve($profile_id);
-                } catch (Exception $e) {
-                    if (strpos($e->getMessage(), 'No such customer') !== false) {
+                if ($this->settings->get('plugin_stripecheckout_Delete Client From Gateway')) {
+                    try {
+                        $customer = \Stripe\Customer::retrieve($profile_id);
+                    } catch (Exception $e) {
+                        if (strpos($e->getMessage(), 'No such customer') !== false) {
+                            if (is_array($profile_id_array)) {
+                                unset($profile_id_array[basename(dirname(__FILE__))]);
+                            } else {
+                                $profile_id_array = array();
+                            }
+
+                            $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
+                            $user->save();
+
+                            $eventLog = Client_EventLog::newInstance(false, $user->getId(), $user->getId());
+                            $eventLog->setSubject($this->user->getId());
+                            $eventLog->setAction(CLIENT_EVENTLOG_DELETEDBILLINGPROFILEID);
+                            $params = array(
+                                'paymenttype' => $this->settings->get("plugin_" . basename(dirname(__FILE__)) . "_Plugin Name"),
+                                'profile_id' => $profile_id
+                            );
+                            $eventLog->setParams(serialize($params));
+                            $eventLog->save();
+
+                            return array(
+                                'error'      => false,
+                                'profile_id' => $profile_id
+                            );
+                        }
+                    }
+
+                    if ($customer === null) {
+                        return array(
+                          'error'  => true,
+                            'detail' => $this->user->lang("There was an error performing this operation.") . " " . $this->user->lang("User does not exist.")
+                        );
+                    }
+
+                    try {
+                        $customer = $customer->delete();
+                    } catch (Exception $e) {
+                        if (strpos($e->getMessage(), 'No such customer') !== false) {
+                            if (is_array($profile_id_array)) {
+                                unset($profile_id_array[basename(dirname(__FILE__))]);
+                            } else {
+                                $profile_id_array = array();
+                            }
+
+                            $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
+                            $user->save();
+
+                            $eventLog = Client_EventLog::newInstance(false, $user->getId(), $user->getId());
+                            $eventLog->setSubject($this->user->getId());
+                            $eventLog->setAction(CLIENT_EVENTLOG_DELETEDBILLINGPROFILEID);
+                            $params = array(
+                                'paymenttype' => $this->settings->get("plugin_" . basename(dirname(__FILE__)) . "_Plugin Name"),
+                                'profile_id' => $profile_id
+                            );
+                            $eventLog->setParams(serialize($params));
+                            $eventLog->save();
+
+                            return array(
+                                'error'      => false,
+                                'profile_id' => $profile_id
+                            );
+                        }
+                    }
+
+                    if ($customer->id == $profile_id && $customer->deleted == true) {
                         if (is_array($profile_id_array)) {
                             unset($profile_id_array[basename(dirname(__FILE__))]);
                         } else {
@@ -531,7 +658,7 @@ class PluginStripecheckout extends GatewayPlugin
                         $eventLog->setSubject($this->user->getId());
                         $eventLog->setAction(CLIENT_EVENTLOG_DELETEDBILLINGPROFILEID);
                         $params = array(
-                            'paymenttype' => $this->settings->get("plugin_".basename(dirname(__FILE__))."_Plugin Name"),
+                            'paymenttype' => $this->settings->get("plugin_" . basename(dirname(__FILE__)) . "_Plugin Name"),
                             'profile_id' => $profile_id
                         );
                         $eventLog->setParams(serialize($params));
@@ -541,19 +668,13 @@ class PluginStripecheckout extends GatewayPlugin
                             'error'      => false,
                             'profile_id' => $profile_id
                         );
+                    } else {
+                        return array(
+                            'error'  => true,
+                            'detail' => $this->user->lang("There was an error performing this operation.")
+                        );
                     }
-                }
-
-                if ($customer === null) {
-                    return array(
-                      'error'  => true,
-                        'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("User does not exist.")
-                    );
-                }
-
-                $customer = $customer->delete();
-
-                if ($customer->id == $profile_id && $customer->deleted == true) {
+                } else {
                     if (is_array($profile_id_array)) {
                         unset($profile_id_array[basename(dirname(__FILE__))]);
                     } else {
@@ -567,7 +688,7 @@ class PluginStripecheckout extends GatewayPlugin
                     $eventLog->setSubject($this->user->getId());
                     $eventLog->setAction(CLIENT_EVENTLOG_DELETEDBILLINGPROFILEID);
                     $params = array(
-                        'paymenttype' => $this->settings->get("plugin_".basename(dirname(__FILE__))."_Plugin Name"),
+                        'paymenttype' => $this->settings->get("plugin_" . basename(dirname(__FILE__)) . "_Plugin Name"),
                         'profile_id' => $profile_id
                     );
                     $eventLog->setParams(serialize($params));
@@ -577,16 +698,30 @@ class PluginStripecheckout extends GatewayPlugin
                         'error'      => false,
                         'profile_id' => $profile_id
                     );
-                } else {
-                    return array(
-                        'error'  => true,
-                        'detail' => $this->user->lang("There was an error performing this operation.")
-                    );
                 }
             } else {
+                if (is_array($profile_id_array)) {
+                    unset($profile_id_array[basename(dirname(__FILE__))]);
+                } else {
+                    $profile_id_array = array();
+                }
+
+                $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
+                $user->save();
+
+                $eventLog = Client_EventLog::newInstance(false, $user->getId(), $user->getId());
+                $eventLog->setSubject($this->user->getId());
+                $eventLog->setAction(CLIENT_EVENTLOG_DELETEDBILLINGPROFILEID);
+                $params = array(
+                    'paymenttype' => $this->settings->get("plugin_" . basename(dirname(__FILE__)) . "_Plugin Name"),
+                    'profile_id' => $profile_id
+                );
+                $eventLog->setParams(serialize($params));
+                $eventLog->save();
+
                 return array(
-                    'error'  => true,
-                    'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("profile_id is empty.")
+                    'error'      => false,
+                    'profile_id' => $profile_id
                 );
             }
         } catch (\Stripe\Error\Card $e) {
@@ -680,6 +815,13 @@ class PluginStripecheckout extends GatewayPlugin
 
         // Use Stripe's bindings...
         \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+        \Stripe\Stripe::setAppInfo(
+            'Clientexec',
+            CE_Lib::getAppVersion(),
+            'https://www.clientexec.com',
+            STRIPE_PARTNER_ID
+        );
+        \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
 
         $sessionParams = array(
             'payment_method_types' => array(
@@ -795,6 +937,13 @@ class PluginStripecheckout extends GatewayPlugin
                 try {
                     // Use Stripe's bindings...
                     \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+                    \Stripe\Stripe::setAppInfo(
+                        'Clientexec',
+                        CE_Lib::getAppVersion(),
+                        'https://www.clientexec.com',
+                        STRIPE_PARTNER_ID
+                    );
+                    \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
 
                     $sessionParams = array(
                         'payment_method_types' => array(

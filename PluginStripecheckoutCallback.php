@@ -19,6 +19,13 @@ class PluginStripecheckoutCallback extends PluginCallback
 
         // Use Stripe's bindings...
         \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+        \Stripe\Stripe::setAppInfo(
+            'Clientexec',
+            CE_Lib::getAppVersion(),
+            'https://www.clientexec.com',
+            STRIPE_PARTNER_ID
+        );
+        \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
         $stripe = new \Stripe\StripeClient($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
 
         $session = false;

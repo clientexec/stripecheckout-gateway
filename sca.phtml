@@ -31,7 +31,7 @@
                         url: 'index.php?controller=signup&fuse=admin&action=testpasswordstrength',
                         async: false,
                         success : function(response) {
-                            json = ce.parseResponse(response);
+                            json = clientexec.parseResponse(response);
                             if (!json.valid) {
                                 password_validated = false;
                                 $('#password').parent().addClass('has-error');
