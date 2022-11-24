@@ -144,8 +144,14 @@ class PluginStripecheckout extends GatewayPlugin
             if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                 $profile_id_array = unserialize($Billing_Profile_ID);
 
-                if (is_array($profile_id_array) && isset($profile_id_array[basename(dirname(__FILE__))])) {
-                    $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                if (is_array($profile_id_array)) {
+                    if (isset($profile_id_array[basename(dirname(__FILE__))])) {
+                        $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                    } elseif (isset($profile_id_array['stripecheckout'])) {
+                        $profile_id = $profile_id_array['stripecheckout'];
+                    } elseif (isset($profile_id_array['stripe'])) {
+                        $profile_id = $profile_id_array['stripe'];
+                    }
                 }
             }
 
@@ -372,12 +378,19 @@ class PluginStripecheckout extends GatewayPlugin
                 if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                     $profile_id_array = unserialize($Billing_Profile_ID);
 
-                    if (is_array($profile_id_array) && isset($profile_id_array[basename(dirname(__FILE__))])) {
-                        $profile_id = $profile_id_array[basename(dirname(__FILE__))];
-                        $profile_id_values_array = explode('|', $profile_id);
-                        $profile_id = $profile_id_values_array[0];
+                    if (is_array($profile_id_array)) {
+                        if (isset($profile_id_array[basename(dirname(__FILE__))])) {
+                            $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                        } elseif (isset($profile_id_array['stripecheckout'])) {
+                            $profile_id = $profile_id_array['stripecheckout'];
+                        } elseif (isset($profile_id_array['stripe'])) {
+                            $profile_id = $profile_id_array['stripe'];
+                        }
                     }
                 }
+
+                $profile_id_values_array = explode('|', $profile_id);
+                $profile_id = $profile_id_values_array[0];
 
                 if ($profile_id != '') {
                     $customer = \Stripe\Customer::retrieve($profile_id);
@@ -569,11 +582,16 @@ class PluginStripecheckout extends GatewayPlugin
                 if (is_array($profile_id_array)) {
                     if (isset($profile_id_array[basename(dirname(__FILE__))])) {
                         $profile_id = $profile_id_array[basename(dirname(__FILE__))];
-                        $profile_id_values_array = explode('|', $profile_id);
-                        $profile_id = $profile_id_values_array[0];
+                    } elseif (isset($profile_id_array['stripecheckout'])) {
+                        $profile_id = $profile_id_array['stripecheckout'];
+                    } elseif (isset($profile_id_array['stripe'])) {
+                        $profile_id = $profile_id_array['stripe'];
                     }
                 }
             }
+
+            $profile_id_values_array = explode('|', $profile_id);
+            $profile_id = $profile_id_values_array[0];
 
             if ($profile_id != '') {
                 if ($this->settings->get('plugin_stripecheckout_Delete Client From Gateway')) {
@@ -902,11 +920,16 @@ class PluginStripecheckout extends GatewayPlugin
                 if ($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                     $profile_id_array = unserialize($Billing_Profile_ID);
 
-                    if (is_array($profile_id_array) && isset($profile_id_array[basename(dirname(__FILE__))])) {
-                        $this->view->hasBillingProfile = true;
+                    if (is_array($profile_id_array)) {
+                        if (isset($profile_id_array[basename(dirname(__FILE__))])) {
+                            $this->view->hasBillingProfile = true;
+                        } elseif (isset($profile_id_array['stripecheckout'])) {
+                            $this->view->hasBillingProfile = true;
+                        } elseif (isset($profile_id_array['stripe'])) {
+                            $this->view->hasBillingProfile = true;
+                        }
                     }
                 }
-
 
                 if ($this->view->logoImage == '') {
                     $SoftwareURL = mb_substr(CE_Lib::getSoftwareURL(), -1, 1) == "//" ? CE_Lib::getSoftwareURL() : CE_Lib::getSoftwareURL()."/";
@@ -916,7 +939,7 @@ class PluginStripecheckout extends GatewayPlugin
                 return $this->view->render('form.phtml');
                 break;
             case 'signup':
-                $fakeForm = '<a style="margin-left:0px;cursor:pointer;" class="app-btns primary customButton center-on-mobile" onclick="cart.submit_form('.$params['loggedIn'].');"  id="submitButton"></a>';
+                $fakeForm = '<a style="margin-left:0px;cursor:pointer;" class="app-btns primary customButton center-on-mobile '.((@$params['termsConditions'])? 'disabled' : '').'" onclick="cart.submit_form('.$params['loggedIn'].');"  id="submitButton"></a>';
 
                 return $fakeForm;
                 break;
@@ -972,8 +995,14 @@ class PluginStripecheckout extends GatewayPlugin
                     if ($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
                         $profile_id_array = unserialize($Billing_Profile_ID);
 
-                        if (is_array($profile_id_array) && isset($profile_id_array[basename(dirname(__FILE__))])) {
-                            $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                        if (is_array($profile_id_array)) {
+                            if (isset($profile_id_array[basename(dirname(__FILE__))])) {
+                                $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                            } elseif (isset($profile_id_array['stripecheckout'])) {
+                                $profile_id = $profile_id_array['stripecheckout'];
+                            } elseif (isset($profile_id_array['stripe'])) {
+                                $profile_id = $profile_id_array['stripe'];
+                            }
                         }
                     }
 
