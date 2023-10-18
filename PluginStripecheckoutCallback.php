@@ -44,8 +44,8 @@ class PluginStripecheckoutCallback extends PluginCallback
 
         if ($session !== false) {
             $payment_intent = \Stripe\PaymentIntent::retrieve($session->payment_intent);
-            $transactionId = $payment_intent->charges->data[0]->balance_transaction;
-            $amount = sprintf("%01.2f", round(($payment_intent->charges->data[0]->amount / 100), 2));
+            $transactionId = \Stripe\Charge::retrieve($payment_intent->latest_charge)->balance_transaction;
+            $amount = sprintf("%01.2f", round(($payment_intent->amount / 100), 2));
             $success = ($payment_intent->status == 'succeeded');
 
             // Create Plugin class object to interact with CE.

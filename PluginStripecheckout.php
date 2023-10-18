@@ -252,8 +252,8 @@ class PluginStripecheckout extends GatewayPlugin
                     );
 
                     if ($payment_intent->status == 'succeeded') {
-                        $transactionId = $payment_intent->charges->data[0]->balance_transaction;
-                        $amount = sprintf("%01.2f", round(($payment_intent->charges->data[0]->amount / 100), 2));
+                        $transactionId = \Stripe\Charge::retrieve($payment_intent->latest_charge)->balance_transaction;
+                        $amount = sprintf("%01.2f", round(($payment_intent->amount / 100), 2));
                         $cPlugin->setTransactionID($transactionId);
                         $cPlugin->PaymentAccepted($amount, "Stripe Checkout payment of {$amount} was accepted. (Transaction ID: {$transactionId})", $transactionId);
 
@@ -972,15 +972,20 @@ class PluginStripecheckout extends GatewayPlugin
                         'payment_method_types' => array(
                             'card'
                         ),
-                        'line_items'           => array(
-                            array(
-                                'name'        => 'Invoice #'.$params['invoiceId'],
-                                'description' => 'Invoice #'.$params['invoiceId'],
-                                'amount'      => $totalAmountCents,
-                                'currency'    => $params['currency'],
-                                'quantity'    => 1,
-                            )
-                        ),
+
+                        'line_items' => [[
+                            'price_data' => [
+                                'currency' => $params['currency'],
+                                'unit_amount' => $totalAmountCents,
+                                'product_data' => [
+                                    'name' => 'Invoice #' . $params['invoiceId'],
+                                    'description' => 'Invoice #' . $params['invoiceId'],
+                                ],
+                            ],
+                            'quantity' => 1,
+                        ]],
+
+                        'mode' => 'payment',
                         //Set payment_intent off_session
                         'payment_intent_data'  => array(
                             'setup_future_usage' => 'off_session',
@@ -1023,6 +1028,7 @@ class PluginStripecheckout extends GatewayPlugin
                     return $this->view->render('sca.phtml');
                     break;
                 } catch (Exception $e) {
+                    CE_Lib::log(4, $e->getMessage());
                     return '';
                 }
         }
