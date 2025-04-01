@@ -26,6 +26,21 @@ class PluginStripecheckout extends GatewayPlugin
                 'description' => lang('Please enter your Stripe Checkout Gateway Secret Key here.'),
                 'value'       => ''
             ),
+            lang('Test Mode?') => array(
+                'type'        => 'yesno',
+                'description' => lang('Enable test mode, and use the test keys instead of the live keys.'),
+                'value'       => '0'
+            ),
+            lang('Stripe Checkout Test Publishable Key') => array(
+                'type'        => 'password',
+                'description' => lang('Please enter your Stripe Checkout Test Publishable Key here.'),
+                'value'       => ''
+            ),
+            lang('Stripe Checkout Test Secret Key') => array(
+                'type'        => 'password',
+                'description' => lang('Please enter your Stripe Checkout Test Secret Key here.'),
+                'value'       => ''
+            ),
             lang('Delete Client From Gateway') => array(
                 'type'        => 'yesno',
                 'description' => lang('Select YES if you want to delete the client from the gateway when the client changes the payment method or is deleted.'),
@@ -126,7 +141,13 @@ class PluginStripecheckout extends GatewayPlugin
         }
 
         try {
-            \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+            if ($this->getVariable('Test Mode?') == '1') {
+                $key = $this->getVariable('Stripe Checkout Test Secret Key');
+            } else {
+                $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+            }
+
+            \Stripe\Stripe::setApiKey($key);
             \Stripe\Stripe::setAppInfo(
                 'Clientexec',
                 CE_Lib::getAppVersion(),
@@ -247,9 +268,15 @@ class PluginStripecheckout extends GatewayPlugin
                             'payment_method'       => $params['payment_method'],
                             'description'          => 'Invoice #'.$params['invoiceNumber'],
                             'off_session'          => true,
-                            'confirm'              => true
+                            'confirm'              => true,
+                            'capture_method'       => 'manual'
                         )
                     );
+
+
+                    if ($payment_intent->status == "requires_capture") {
+                        $result = $payment_intent->capture();
+                    }
 
                     if ($payment_intent->status == 'succeeded') {
                         $transactionId = \Stripe\Charge::retrieve($payment_intent->latest_charge)->balance_transaction;
@@ -359,8 +386,14 @@ class PluginStripecheckout extends GatewayPlugin
         }
 
         try {
+            if ($this->getVariable('Test Mode?') == '1') {
+                $key = $this->getVariable('Stripe Checkout Test Secret Key');
+            } else {
+                $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+            }
+
             // Use Stripe's bindings...
-            \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+            \Stripe\Stripe::setApiKey($key);
             \Stripe\Stripe::setAppInfo(
                 'Clientexec',
                 CE_Lib::getAppVersion(),
@@ -422,55 +455,34 @@ class PluginStripecheckout extends GatewayPlugin
                         )
                     );
                 }
+
+                $profile_id = $customer->id;
+                $Billing_Profile_ID = '';
+                $profile_id_array = array();
+                $user = new User($params['CustomerID']);
+
+                if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
+                    $profile_id_array = unserialize($Billing_Profile_ID);
+                }
+
+                if (!is_array($profile_id_array)) {
+                    $profile_id_array = array();
+                }
+
+                $profile_id_array[basename(dirname(__FILE__))] = $profile_id;
+                $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
+                $user->save();
+
+                return array(
+                    'error'               => false,
+                    'profile_id'          => $profile_id
+                );
             } else {
-                $customer = \Stripe\Customer::create(
-                    array(
-                        'name'    => $params["userFirstName"].' '.$params["userLastName"],
-                        'address' => array(
-                            'line1'       => $params["userAddress"],
-                            'postal_code' => $params["userZipcode"],
-                            'city'        => $params["userCity"],
-                            'state'       => $params["userState"],
-                            'country'     => $params["userCountry"]
-                        ),
-                        'email'   => $params['userEmail'],
-                        'phone'   => $params['userPhone'],
-                        'card'    => array(
-                            'number'          => $params['userCCNumber'],
-                            'exp_month'       => $params['cc_exp_month'],
-                            'exp_year'        => $params['cc_exp_year'],
-                            'address_line1'   => $params["userAddress"],
-                            'address_city'    => $params["userCity"],
-                            'address_zip'     => $params["userZipcode"],
-                            'address_state'   => $params["userState"],
-                            'address_country' => $params["userCountry"]
-                        ),
-                       'validate' => $validate
-                    )
+                return array(
+                    'error'  => true,
+                    'detail' => $this->user->lang("There was an error performing this operation.") . " " . $this->user->lang("payment_method value is missing.")
                 );
             }
-
-            $profile_id = $customer->id;
-            $Billing_Profile_ID = '';
-            $profile_id_array = array();
-            $user = new User($params['CustomerID']);
-
-            if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
-                $profile_id_array = unserialize($Billing_Profile_ID);
-            }
-
-            if (!is_array($profile_id_array)) {
-                $profile_id_array = array();
-            }
-
-            $profile_id_array[basename(dirname(__FILE__))] = $profile_id;
-            $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
-            $user->save();
-
-            return array(
-                'error'               => false,
-                'profile_id'          => $profile_id
-            );
         } catch (\Stripe\Error\Card $e) {
             $body = $e->getJsonBody();
             $err  = $body['error'];
@@ -561,8 +573,14 @@ class PluginStripecheckout extends GatewayPlugin
         try {
             require_once 'modules/clients/models/Client_EventLog.php';
 
+            if ($this->getVariable('Test Mode?') == '1') {
+                $key = $this->getVariable('Stripe Checkout Test Secret Key');
+            } else {
+                $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+            }
+
             // Use Stripe's bindings...
-            \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+            \Stripe\Stripe::setApiKey($key);
             \Stripe\Stripe::setAppInfo(
                 'Clientexec',
                 CE_Lib::getAppVersion(),
@@ -830,9 +848,15 @@ class PluginStripecheckout extends GatewayPlugin
         //Pass this variable to your gateway to let it know where to send a callback.
         $urlFix = mb_substr(CE_Lib::getSoftwareURL(), -1, 1) == "//" ? '' : '/';
         $callbackUrl = CE_Lib::getSoftwareURL().$urlFix.'plugins/gateways/'.basename(dirname(__FILE__)).'/callback.php?isSignup='.$isSignup.'&session_id={CHECKOUT_SESSION_ID}';
+        
+        if ($this->getVariable('Test Mode?') == '1') {
+            $key = $this->getVariable('Stripe Checkout Test Secret Key');
+        } else {
+            $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+        }
 
         // Use Stripe's bindings...
-        \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+        \Stripe\Stripe::setApiKey($key);
         \Stripe\Stripe::setAppInfo(
             'Clientexec',
             CE_Lib::getAppVersion(),
@@ -845,15 +869,18 @@ class PluginStripecheckout extends GatewayPlugin
             'payment_method_types' => array(
                 'card'
             ),
-            'line_items'           => array(
-                array(
-                    'name'        => 'Invoice #'.$params['invoiceNumber'],
-                    'description' => 'Invoice #'.$params['invoiceNumber'],
-                    'amount'      => $totalAmountCents,
-                    'currency'    => $params['userCurrency'],
-                    'quantity'    => 1,
-                )
-            ),
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => $params['userCurrency'],
+                    'unit_amount' => $totalAmountCents,
+                    'product_data' => [
+                        'name' => 'Invoice #' . $params['invoiceNumber'],
+                        'description' => 'Invoice #' . $params['invoiceNumber'],
+                    ],
+                ],
+                'quantity' => 1,
+            ]],
+            'mode' => 'payment',
             //Set payment_intent off_session
             'payment_intent_data'  => array(
                 'setup_future_usage' => 'off_session',
@@ -868,11 +895,17 @@ class PluginStripecheckout extends GatewayPlugin
             $sessionParams['customer'] = $profile_id;
         } else {
             $sessionParams['customer_email'] = $this->user->getEmail();
+            $sessionParams['customer_creation']  = 'always';
         }
 
         $session = \Stripe\Checkout\Session::create($sessionParams);
 
-        $publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+        if ($this->getVariable('Test Mode?') == '1') {
+            $publishableKey = $this->getVariable('Stripe Checkout Test Publishable Key');
+        } else {
+            $publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+        }
+
         $sessionId = $session->id;
 
         $strRet = '<script data-cfasync="false" src="https://js.stripe.com/v3/"></script>'
@@ -897,7 +930,7 @@ class PluginStripecheckout extends GatewayPlugin
 
     public function getForm($params)
     {
-        if ($this->getVariable('Stripe Checkout Gateway Publishable Key') == '') {
+        if (($this->getVariable('Test Mode?') == '0' && $this->getVariable('Stripe Checkout Gateway Publishable Key') == '') || ($this->getVariable('Test Mode?') == '1' && $this->getVariable('Stripe Checkout Test Publishable Key') == '')) {
             return '';
         }
 
@@ -906,7 +939,13 @@ class PluginStripecheckout extends GatewayPlugin
         switch ($params['from']) {
             case 'paymentmethod':
                 $this->view->hasBillingProfile = false;
-                $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+
+                if ($this->getVariable('Test Mode?') == '1') {
+                    $this->view->publishableKey = $this->getVariable('Stripe Checkout Test Publishable Key');
+                } else {
+                    $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+                }
+
                 $this->view->logoImage = $this->getVariable('Stripe Checkout Logo Image URL');
                 $this->view->companyName = $this->settings->get("Company Name");
                 $this->view->invoiceId = $params['invoiceId'];
@@ -958,8 +997,14 @@ class PluginStripecheckout extends GatewayPlugin
                 $callbackUrl = CE_Lib::getSoftwareURL().$urlFix.'plugins/gateways/'.basename(dirname(__FILE__)).'/callback.php?isSignup='.$isSignup.'&session_id={CHECKOUT_SESSION_ID}';
 
                 try {
+                    if ($this->getVariable('Test Mode?') == '1') {
+                        $key = $this->getVariable('Stripe Checkout Test Secret Key');
+                    } else {
+                        $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+                    }
+
                     // Use Stripe's bindings...
-                    \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+                    \Stripe\Stripe::setApiKey($key);
                     \Stripe\Stripe::setAppInfo(
                         'Clientexec',
                         CE_Lib::getAppVersion(),
@@ -1018,11 +1063,17 @@ class PluginStripecheckout extends GatewayPlugin
                         $sessionParams['customer'] = $profile_id;
                     } else {
                         $sessionParams['customer_email'] = $this->user->getEmail();
+                        $sessionParams['customer_creation']  = 'always';
                     }
 
                     $session = \Stripe\Checkout\Session::create($sessionParams);
 
-                    $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+                    if ($this->getVariable('Test Mode?') == '1') {
+                        $this->view->publishableKey = $this->getVariable('Stripe Checkout Test Publishable Key');
+                    } else {
+                        $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
+                    }
+
                     $this->view->sessionId = $session->id;
 
                     return $this->view->render('sca.phtml');

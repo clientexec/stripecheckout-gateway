@@ -17,8 +17,14 @@ class PluginStripecheckoutCallback extends PluginCallback
             $testing = $GLOBALS['testing'];
         }
 
+        if ($this->settings->get('plugin_stripecheckout_Test Mode?') == '1') {
+            $key = $this->settings->get('plugin_stripecheckout_Stripe Checkout Test Secret Key');
+        } else {
+            $key = $this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key');
+        }
+
         // Use Stripe's bindings...
-        \Stripe\Stripe::setApiKey($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+        \Stripe\Stripe::setApiKey($key);
         \Stripe\Stripe::setAppInfo(
             'Clientexec',
             CE_Lib::getAppVersion(),
@@ -26,7 +32,7 @@ class PluginStripecheckoutCallback extends PluginCallback
             STRIPE_PARTNER_ID
         );
         \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
-        $stripe = new \Stripe\StripeClient($this->settings->get('plugin_stripecheckout_Stripe Checkout Gateway Secret Key'));
+        $stripe = new \Stripe\StripeClient($key);
 
         $session = false;
         try {
