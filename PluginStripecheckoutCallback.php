@@ -49,10 +49,27 @@ class PluginStripecheckoutCallback extends PluginCallback
         $invoiceId = substr($lineItems->data[0]->description, 9);
 
         if ($session !== false) {
-            $payment_intent = \Stripe\PaymentIntent::retrieve($session->payment_intent);
+            $payment_intent_id = $session->payment_intent;
+            $payment_intent = \Stripe\PaymentIntent::retrieve($payment_intent_id);
+
+            if ($payment_intent->status == "requires_capture") {
+                $result = $payment_intent->capture();
+            }
+
+            if ($payment_intent->latest_charge === null) {
+                $this->redirect();
+                exit;
+            }
+
             $transactionId = \Stripe\Charge::retrieve($payment_intent->latest_charge)->balance_transaction;
+
+            if ($transactionId === null) {
+                sleep(3); // 3 seconds
+                $payment_intent = \Stripe\PaymentIntent::retrieve($payment_intent_id);
+                $transactionId = \Stripe\Charge::retrieve($payment_intent->latest_charge)->balance_transaction;
+            }
+
             $amount = sprintf("%01.2f", round(($payment_intent->amount / 100), 2));
-            $success = ($payment_intent->status == 'succeeded');
 
             // Create Plugin class object to interact with CE.
             $cPlugin = new Plugin($invoiceId, basename(dirname(__FILE__)), $this->user);
@@ -80,38 +97,50 @@ class PluginStripecheckoutCallback extends PluginCallback
                 $cancel_url = $invoiceviewURLCancel;
             }
 
-            if ($success) {
-                //save profile id
-                $profile_id = $payment_intent->customer;
-                $payment_method = $payment_intent->payment_method;
-                $Billing_Profile_ID = '';
-                $profile_id_array = array();
-                $customerid = $cPlugin->m_Invoice->getUserID();
-                $user = new User($customerid);
+            switch ($payment_intent->status) {
+                case 'processing':
+                    if (isset($transactionId)) {
+                        $cPlugin->PaymentPending("Stripe Checkout payment of {$amount} is being processed. Confirmation may take several business days. (Transaction ID: {$transactionId})", $transactionId);
+                    }
 
-                if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
-                    $profile_id_array = unserialize($Billing_Profile_ID);
-                }
+                    header('Location: '.$return_url);
 
-                if (!is_array($profile_id_array)) {
+                    break;
+                case 'succeeded':
+                    //save profile id
+                    $profile_id = $payment_intent->customer;
+                    $payment_method = $payment_intent->payment_method;
+                    $Billing_Profile_ID = '';
                     $profile_id_array = array();
-                }
+                    $customerid = $cPlugin->m_Invoice->getUserID();
+                    $user = new User($customerid);
 
-                $profile_id_array[basename(dirname(__FILE__))] = $profile_id.'|'.$payment_method;
-                $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
-                $user->save();
-                //save profile id
+                    if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
+                        $profile_id_array = unserialize($Billing_Profile_ID);
+                    }
 
-                $cPlugin->PaymentAccepted($amount, "Stripe Checkout payment of {$amount} was accepted. (Transaction ID: {$transactionId})", $transactionId);
-                header('Location: '.$return_url);
-            } else {
-                if (isset($transactionId)) {
-                    $cPlugin->PaymentRejected("Stripe Checkout payment of {$amount} was rejected. (Transaction ID: {$transactionId})");
-                }
-                
-                header('Location: '.$cancel_url);
+                    if (!is_array($profile_id_array)) {
+                        $profile_id_array = array();
+                    }
+
+                    $profile_id_array[basename(dirname(__FILE__))] = $profile_id.'|'.$payment_method;
+                    $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
+                    $user->save();
+                    //save profile id
+
+                    $cPlugin->PaymentAccepted($amount, "Stripe Checkout payment of {$amount} was accepted. (Transaction ID: {$transactionId})", $transactionId);
+                    header('Location: '.$return_url);
+
+                    break;
+                default: //'failed'
+                    if (isset($transactionId)) {
+                        $cPlugin->PaymentRejected("Stripe Checkout payment of {$amount} was rejected. (Transaction ID: {$transactionId})");
+                    }
+
+                    header('Location: '.$cancel_url);
+
+                    break;
             }
-            exit;
         } else {
             $this->redirect();
         }

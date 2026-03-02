@@ -192,19 +192,24 @@ class PluginStripecheckout extends GatewayPlugin
                     }
                 }
 
-                $refund = \Stripe\Refund::create(
-                    array(
-                        "charge" => $transaction->source
-                    )
-                );
+                try {
+                    $refund = \Stripe\Refund::create(
+                        array(
+                            "charge" => $transaction->source
+                        )
+                    );
 
-                if ($refund->status == 'succeeded') {
-                    $chargeAmount = sprintf("%01.2f", round(($refund->amount / 100), 2));
-                    $cPlugin->PaymentAccepted($chargeAmount, "Stripe Checkout refund of {$chargeAmount} was successfully processed.", $refund->id);
-                    return array('AMOUNT' => $chargeAmount);
-                } else {
-                    $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation."));
-                    return $this->user->lang("There was an error performing this operation.");
+                    if ($refund->status == 'succeeded') {
+                        $chargeAmount = sprintf("%01.2f", round(($refund->amount / 100), 2));
+                        $cPlugin->PaymentAccepted($chargeAmount, "Stripe Checkout refund of {$chargeAmount} was successfully processed.", $refund->id);
+                        return array('AMOUNT' => $chargeAmount);
+                    } else {
+                        $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation."));
+                        return $this->user->lang("There was an error performing this operation.");
+                    }
+                } catch (Exception $e) {
+                    $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.").' '.$e->getMessage());
+                    return $this->user->lang("There was an error performing this operation.").' '.$e->getMessage();
                 }
             } else {
                 $profile_id_values_array = explode('|', $profile_id);
