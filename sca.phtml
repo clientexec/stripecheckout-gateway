@@ -1,75 +1,71 @@
-<script data-cfasync="false" src="https://js.stripe.com/v3/"></script>
-
 <?php if ($this->from == 'signup') { ?>
     <a style="margin-left:0px;cursor:pointer;" class="btn-success btn btn-lg customButton center-on-mobile stripecheckoutButton <?php if (@$this->termsConditions) {
-?>disabled<?php
-} ?>" id="customButton"></a>
+        ?>disabled<?php
+    } ?>" id="customButton"></a>
 <?php } elseif ($this->from == 'invoice') { ?>
     <button class="app-btns primary customButton stripecheckoutButton"><?php echo $this->user->lang('Pay Invoice'); ?></button>
 <?php } ?>
 
 <script data-cfasync="false" type="text/javascript">
-    var stripe = Stripe('<?php echo $this->publishableKey; ?>');
-
     $('.stripecheckoutButton').on('click', function(e) {
         <?php if ($this->from == 'signup') { ?>
-            if ($('.stripecheckoutButton').hasClass('disabled')) {
-                return;
-            }
+        if ($('.stripecheckoutButton').hasClass('disabled')) {
+            return;
+        }
 
-            var password_validated = true;
+        var password_validated = true;
 
-            <?php if (!$this->loggedIn) { ?>
-                $('.parsley-error-list.help-block').parent().removeClass('has-error');
-                $('.parsley-error-list.help-block').remove();
-                e.preventDefault();
+        <?php if (!$this->loggedIn) { ?>
+        $('.parsley-error-list.help-block').parent().removeClass('has-error');
+        $('.parsley-error-list.help-block').remove();
+        e.preventDefault();
 
-                //let's validate remote data
-                if ($('#password').length > 0) {
-                    if ($.trim($('#password').val()) == "") return;
-                    $.ajax({
-                        type: "POST",
-                        data: {"password": $('#password').val()},
-                        url: 'index.php?controller=signup&fuse=admin&action=testpasswordstrength',
-                        async: false,
-                        success : function(response) {
-                            json = clientexec.parseResponse(response);
-                            if (!json.valid) {
-                                password_validated = false;
-                                $('#password').parent().addClass('has-error');
-                                $('#password').after('<span class="help-block parsley-error-list">'+json.errorMessage+'</span>');
-                                $('#password').get(0).scrollIntoView();
-                            }
-                        }
-                    });
+        //let's validate remote data
+        if ($('#password').length > 0) {
+            if ($.trim($('#password').val()) == "") return;
+            $.ajax({
+                type: "POST",
+                data: {"password": $('#password').val()},
+                url: 'index.php?controller=signup&fuse=admin&action=testpasswordstrength',
+                async: false,
+                success : function(response) {
+                    json = clientexec.parseResponse(response);
+                    if (!json.valid) {
+                        password_validated = false;
+                        $('#password').parent().addClass('has-error');
+                        $('#password').after('<span class="help-block parsley-error-list">'+json.errorMessage+'</span>');
+                        $('#password').get(0).scrollIntoView();
+                    }
                 }
-            <?php } ?>
-
-            if (password_validated && $('#submitForm').parsley('validate')) {
+            });
+        }
         <?php } ?>
 
-        // Open Checkout with further options
-        stripecheckoutOpenHandler();
+        if (password_validated && $('#submitForm').parsley('validate')) {
+            <?php } ?>
 
-        <?php if ($this->from == 'signup') { ?>
-            }
+            // Open Checkout with further options
+            stripecheckoutOpenHandler();
+
+            <?php if ($this->from == 'signup') { ?>
+        }
         <?php } ?>
 
         e.preventDefault();
     });
 
     function stripecheckoutOpenHandler() {
-        stripe.redirectToCheckout({
-            sessionId: '<?php echo $this->sessionId; ?>'
-        }).then(function (result) {
-            // If `redirectToCheckout` fails due to a browser or network error, display the localized error message to your customer using `result.error.message`.
-            console.log(result);
-            console.log(result.error.message);
-            alert(result.error.message);
+        <?php if ($this->from == 'invoice') { ?>
+        // Stripe Checkout redirects straight to the callback, so the invoice form (and its "Make this my default
+        // payment method" checkbox) is never posted. The session URL is fixed when the page loads, so the
+        // checkbox state is passed to the callback in a short-lived cookie instead. It is always written, so a
+        // value from an earlier attempt is never reused.
+        var stripecheckoutMakeDefault = $('#makeDefault');
+        var stripecheckoutMakeDefaultValue = (stripecheckoutMakeDefault.length && stripecheckoutMakeDefault.is(':checked') && !stripecheckoutMakeDefault.closest('.makeDefaultOption').hasClass('d-none')) ? '1' : '0';
+        document.cookie = 'stripecheckout_makeDefault=' + stripecheckoutMakeDefaultValue + '; path=/; max-age=3600; SameSite=Lax' + (window.location.protocol === 'https:' ? '; Secure' : '');
+        <?php } ?>
 
-            <?php if ($this->from == 'invoice' || $this->from == 'signup') { ?>
-                $('#submitButton').click();
-            <?php } ?>
-        });
+        // Stripe.js removed redirectToCheckout() starting with Clover, so go to the hosted Checkout page directly
+        window.location.href = <?php echo json_encode($this->sessionUrl); ?>;
     }
 </script>

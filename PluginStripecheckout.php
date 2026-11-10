@@ -4,8 +4,8 @@ require_once 'modules/admin/models/GatewayPlugin.php';
 require_once 'modules/billing/models/class.gateway.plugin.php';
 
 /**
-* @package Plugins
-*/
+ * @package Plugins
+ */
 class PluginStripecheckout extends GatewayPlugin
 {
     function getVariables()
@@ -45,11 +45,6 @@ class PluginStripecheckout extends GatewayPlugin
                 'type'        => 'yesno',
                 'description' => lang('Select YES if you want to delete the client from the gateway when the client changes the payment method or is deleted.'),
                 'value'       => '0'
-            ),
-            lang('Stripe Checkout Logo Image URL') => array(
-                'type'        => 'text',
-                'description' => lang('A relative or absolute URL pointing to a square image of your brand or product.</br>The recommended minimum size is 128x128px.</br>The recommended image types are .gif, .jpeg, and .png.</br>Leave this field empty to use the default image.'),
-                'value'       => ''
             ),
             lang('Invoice After Signup') => array(
                 'type'        => 'yesno',
@@ -147,6 +142,15 @@ class PluginStripecheckout extends GatewayPlugin
                 $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
             }
 
+            if (strpos((string)$key, 'sk_') !== 0 && strpos((string)$key, 'rk_') !== 0) {
+                CE_Lib::log(
+                    1,
+                    'Stripe Checkout: the secret key configured for this gateway is missing or invalid '
+                    . '(it must start with sk_, or rk_ if it is a restricted API key with limited permissions). Check the Stripe Checkout plugin settings '
+                    . '(Test Mode is ' . ($this->getVariable('Test Mode?') == '1' ? 'on' : 'off') . ').'
+                );
+            }
+
             \Stripe\Stripe::setApiKey($key);
             \Stripe\Stripe::setAppInfo(
                 'Clientexec',
@@ -208,8 +212,8 @@ class PluginStripecheckout extends GatewayPlugin
                         return $this->user->lang("There was an error performing this operation.");
                     }
                 } catch (Exception $e) {
-                    $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.").' '.$e->getMessage());
-                    return $this->user->lang("There was an error performing this operation.").' '.$e->getMessage();
+                    $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.") . ' ' . $e->getMessage());
+                    return $this->user->lang("There was an error performing this operation.") . ' ' . $e->getMessage();
                 }
             } else {
                 $profile_id_values_array = explode('|', $profile_id);
@@ -219,21 +223,11 @@ class PluginStripecheckout extends GatewayPlugin
                     $payment_method = $profile_id_values_array[1];
                 } else {
                     if ($profile_id != '') {
-                        try {
-                            $customer = \Stripe\Customer::retrieve($profile_id);
-                            $customer->name = $params["userFirstName"].' '.$params["userLastName"];
-                            $customer->phone = $params['userPhone'];
-                            $customer->address = array(
-                                'line1'       => $params["userAddress"],
-                                'postal_code' => $params["userZipcode"],
-                                'city'        => $params["userCity"],
-                                'state'       => $params["userState"],
-                                'country'     => $params["userCountry"]
-                            );
-                            $customer->save();
-                            $payment_method = $customer->default_source;
-                        } catch (Exception $e) {
+                        $customer = $this->updateStripeCustomer($profile_id, $this->getStripeCustomerFields($params), $user->getId());
+                        if ($customer === null) {
                             $profile_id = '';
+                        } else {
+                            $payment_method = $customer->default_source;
                         }
                     }
                 }
@@ -251,7 +245,7 @@ class PluginStripecheckout extends GatewayPlugin
 
                     return array(
                         'error' => false,
-                        'FORM'  => $form
+                        'FORM' => $form
                     );
                 } else {
                     if ($params['profile_id'] == '' || $params['payment_method'] == '') {
@@ -264,20 +258,19 @@ class PluginStripecheckout extends GatewayPlugin
 
                     $payment_intent = \Stripe\PaymentIntent::create(
                         array(
-                            'amount'               => $totalAmountCents,
-                            'currency'             => $params['userCurrency'],
+                            'amount' => $totalAmountCents,
+                            'currency' => $params['userCurrency'],
                             'payment_method_types' => array(
                                 'card'
                             ),
-                            'customer'             => $params['profile_id'],
-                            'payment_method'       => $params['payment_method'],
-                            'description'          => 'Invoice #'.$params['invoiceNumber'],
-                            'off_session'          => true,
-                            'confirm'              => true,
-                            'capture_method'       => 'manual'
+                            'customer' => $params['profile_id'],
+                            'payment_method' => $params['payment_method'],
+                            'description' => 'Invoice #' . $params['invoiceNumber'],
+                            'off_session' => true,
+                            'confirm' => true,
+                            'capture_method' => 'manual'
                         )
                     );
-
 
                     if ($payment_intent->status == "requires_capture") {
                         $result = $payment_intent->capture();
@@ -315,7 +308,7 @@ class PluginStripecheckout extends GatewayPlugin
                             $profile_id_array = array();
                         }
 
-                        $profile_id_array[basename(dirname(__FILE__))] = $profile_id.'|'.$payment_method;
+                        $profile_id_array[basename(dirname(__FILE__))] = $profile_id . '|' . $payment_method;
                         $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
                         $user->save();
                         //save profile id
@@ -327,233 +320,243 @@ class PluginStripecheckout extends GatewayPlugin
                     }
                 }
             }
-        } catch (\Stripe\Error\Card $e) {
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$err['message']);
-            return $this->user->lang("There was an error performing this operation.")." ".$err['message'];
-        } catch (\Stripe\Error\RateLimit $e) {
-            // Too many requests made to the API too quickly
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Too many requests made to the API too quickly.")." ".$err['message']);
-            return $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Too many requests made to the API too quickly.")." ".$err['message'];
-        } catch (\Stripe\Error\InvalidRequest $e) {
-            // Invalid parameters were supplied to Stripe's API.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Invalid parameters were supplied to Stripe's API.")." ".$err['message']);
-            return $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Invalid parameters were supplied to Stripe's API.")." ".$err['message'];
-        } catch (\Stripe\Error\Authentication $e) {
-            // Authentication with Stripe's API failed. Maybe you changed API keys recently.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Authentication with Stripe's API failed. Maybe you changed API keys recently.")." ".$err['message']);
-            return $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Authentication with Stripe's API failed. Maybe you changed API keys recently.")." ".$err['message'];
-        } catch (\Stripe\Error\ApiConnection $e) {
-            // Network communication with Stripe failed.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Network communication with Stripe failed")." ".$err['message']);
-            return $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Network communication with Stripe failed")." ".$err['message'];
-        } catch (\Stripe\Error\Base $e) {
-            // Display a very generic error to the user, and maybe send yourself an email.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$err['message']);
-            return $this->user->lang("There was an error performing this operation.")." ".$err['message'];
         } catch (Exception $e) {
-            // Something else happened, completely unrelated to Stripe
-            $cPlugin->PaymentRejected($this->user->lang("There was an error performing this operation.")." ".$e->getMessage());
-            return $this->user->lang("There was an error performing this operation.")." ".$e->getMessage();
+            $errorMessage = $this->getStripeErrorMessage($e);
+            $cPlugin->PaymentRejected($errorMessage);
+            return $errorMessage;
         }
     }
 
-    // Create customer Stripe Checkout profile
-    function createFullCustomerProfile($params)
+    /**
+     * Sends the client to a setup-mode Stripe Checkout Session to save or replace their card.
+     * The callback (isPaymentMethod=1) stores the resulting customer and payment method.
+     */
+    public function updatePaymentMethod($params): mixed
     {
-        $validate = true;
+        if ($this->getVariable('Test Mode?') == '1') {
+            $key = $this->getVariable('Stripe Checkout Test Secret Key');
+        } else {
+            $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+        }
 
-        if ($params['validate'] === false) {
-            $validate = false;
+        if (strpos((string)$key, 'sk_') !== 0 && strpos((string)$key, 'rk_') !== 0) {
+            CE_Lib::log(
+                1,
+                'Stripe Checkout: the secret key configured for this gateway is missing or invalid '
+                . '(it must start with sk_, or rk_ if it is a restricted API key with limited permissions). Check the Stripe Checkout plugin settings '
+                . '(Test Mode is ' . ($this->getVariable('Test Mode?') == '1' ? 'on' : 'off') . ').'
+            );
+        }
+
+        // Use Stripe's bindings...
+        \Stripe\Stripe::setApiKey($key);
+        \Stripe\Stripe::setAppInfo(
+            'Clientexec',
+            CE_Lib::getAppVersion(),
+            'https://www.clientexec.com',
+            STRIPE_PARTNER_ID
+        );
+        \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
+
+        $params['CustomerID'] = $this->user->getId();
+        $params['userEmail'] = $this->user->getEmail();
+        $params['userFirstName'] = $this->user->getFirstName();
+        $params['userLastName'] = $this->user->getLastName();
+        $params['userAddress'] = $this->user->getAddress();
+        $params['userCity'] = $this->user->getCity();
+        $params['userState'] = $this->user->getState();
+        $params['userZipcode'] = $this->user->getZipCode();
+        $params['userCountry'] = $this->user->getCountry();
+        $params['userPhone'] = $this->user->getPhone();
+
+        //Create a client Id hash
+        require_once 'library/encrypted/Clientexec.php';
+
+        $encryptedCustomerID = Clientexec::encryptString($params['CustomerID']);
+        if (is_a($encryptedCustomerID, 'CE_Error')) {
+            return $encryptedCustomerID;
+        }
+
+        $encryptedCustomerID = urlencode(strtr($encryptedCustomerID, '+/', '-_'));
+        //Create a client Id hash
+
+        //Pass this variable to your gateway to let it know where to send a callback.
+        $urlFix = mb_substr(CE_Lib::getSoftwareURL(), -1, 1) == "//" ? '' : '/';
+        $callbackUrl = CE_Lib::getSoftwareURL() . $urlFix . 'plugins/gateways/' . basename(dirname(__FILE__)) . '/callback.php?isPaymentMethod=1&clientHash=' . $encryptedCustomerID . '&session_id={CHECKOUT_SESSION_ID}';
+
+        $sessionParams = array(
+            'payment_method_types' => array(
+                'card'
+            ),
+            'mode' => 'setup',
+            'success_url' => $callbackUrl,
+            'cancel_url' => $callbackUrl,
+        );
+
+        $profile_id = '';
+        $Billing_Profile_ID = '';
+
+        if ($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
+            $profile_id_array = unserialize($Billing_Profile_ID);
+
+            if (is_array($profile_id_array)) {
+                if (isset($profile_id_array[basename(dirname(__FILE__))])) {
+                    $profile_id = $profile_id_array[basename(dirname(__FILE__))];
+                } elseif (isset($profile_id_array['stripecheckout'])) {
+                    $profile_id = $profile_id_array['stripecheckout'];
+                } elseif (isset($profile_id_array['stripe'])) {
+                    $profile_id = $profile_id_array['stripe'];
+                }
+            }
+        }
+
+        $profile_id_values_array = explode('|', $profile_id);
+        $profile_id = $profile_id_values_array[0];
+
+        if ($profile_id != '') {
+            $customer = $this->updateStripeCustomer($profile_id, $this->getStripeCustomerFields($params), $params['CustomerID']);
+            if ($customer === null) {
+                $profile_id = '';
+            }
+        }
+
+        if ($profile_id == '') {
+            $customerFields = $this->getStripeCustomerFields($params);
+            $customerFields['email'] = $params['userEmail'];
+            $customer = $this->createStripeCustomer($customerFields, $params['CustomerID']);
+            $profile_id = ($customer === null) ? '' : $customer->id;
+        }
+
+        if ($profile_id == '') {
+            CE_Lib::addErrorMessage($this->user->lang('Your payment method was not updated'));
+            return '';
+        }
+
+        $sessionParams['customer'] = $profile_id;
+
+        try {
+            //https://stripe.com/docs/payments/save-and-reuse
+            //Create a Checkout Session
+            $session = \Stripe\Checkout\Session::create($sessionParams);
+
+            // 303 redirect to $session->url
+            CE_Lib::redirectPage($session->url);
+            return '';
+        } catch (Exception $e) {
+            CE_Lib::log(4, $this->getStripeErrorMessage($e));
+            CE_Lib::addErrorMessage($this->user->lang('Your payment method was not updated'));
+            return '';
+        }
+    }
+
+    /**
+     * Builds the name, phone and address sent to Stripe when creating or updating a customer.
+     */
+    private function getStripeCustomerFields(array $params): array
+    {
+        $fields = [
+            'name' => $params["userFirstName"] . ' ' . $params["userLastName"],
+            'phone' => (string)$params['userPhone'],
+            'address' => [
+                'line1' => $params["userAddress"],
+                'postal_code' => $params["userZipcode"],
+                'city' => $params["userCity"],
+                'state' => $params["userState"],
+                'country' => $params["userCountry"]
+            ]
+        ];
+
+        // Stripe rejects phone numbers longer than 20 characters, which fails the whole customer request
+        if (mb_strlen($fields['phone']) > 20) {
+            CE_Lib::log(4, 'Stripe Checkout: leaving out the phone number for client ' . $params['CustomerID'] . ', it is longer than the 20 characters Stripe allows');
+            unset($fields['phone']);
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Creates a Stripe customer. If Stripe rejects one of the optional fields (phone, address or name),
+     * that field is dropped and the request retried, so a bad value in the client profile never stops
+     * the customer from being created. Returns null if the customer could not be created.
+     */
+    private function createStripeCustomer(array $fields, $clientId): ?\Stripe\Customer
+    {
+        for ($attempt = 0; $attempt <= 3; $attempt++) {
+            try {
+                return \Stripe\Customer::create($fields);
+            } catch (\Stripe\Exception\InvalidRequestException $e) {
+                $droppedField = $this->dropRejectedCustomerField($fields, $e);
+                if ($droppedField === null) {
+                    CE_Lib::log(1, 'Stripe Checkout: could not create a customer for client ' . $clientId . '. ' . $e->getMessage());
+                    return null;
+                }
+
+                CE_Lib::log(4, 'Stripe Checkout: retrying customer creation for client ' . $clientId . ' without ' . $droppedField . '. ' . $e->getMessage());
+            } catch (Exception $e) {
+                CE_Lib::log(1, 'Stripe Checkout: could not create a customer for client ' . $clientId . '. ' . $e->getMessage());
+                return null;
+            }
+        }
+
+        CE_Lib::log(1, 'Stripe Checkout: could not create a customer for client ' . $clientId . ' after dropping the rejected fields');
+        return null;
+    }
+
+    /**
+     * Updates an existing Stripe customer, dropping and retrying any optional field Stripe rejects.
+     * Returns null only when the customer no longer exists in Stripe, so callers create a new one.
+     * If the update fails for any other reason, the existing customer is returned unchanged, so a bad
+     * value in the client profile never leads to a duplicate customer.
+     */
+    private function updateStripeCustomer(string $profileId, array $fields, $clientId): ?\Stripe\Customer
+    {
+        for ($attempt = 0; $attempt <= 3; $attempt++) {
+            try {
+                return \Stripe\Customer::update($profileId, $fields);
+            } catch (\Stripe\Exception\InvalidRequestException $e) {
+                if ($e->getStripeCode() === 'resource_missing') {
+                    CE_Lib::log(4, 'Stripe Checkout: customer ' . $profileId . ' for client ' . $clientId . ' no longer exists, a new one will be created');
+                    return null;
+                }
+
+                $droppedField = $this->dropRejectedCustomerField($fields, $e);
+                if ($droppedField === null) {
+                    CE_Lib::log(1, 'Stripe Checkout: could not update customer ' . $profileId . ' for client ' . $clientId . ', keeping it unchanged. ' . $e->getMessage());
+                    break;
+                }
+
+                CE_Lib::log(4, 'Stripe Checkout: retrying update of customer ' . $profileId . ' for client ' . $clientId . ' without ' . $droppedField . '. ' . $e->getMessage());
+            } catch (Exception $e) {
+                CE_Lib::log(1, 'Stripe Checkout: could not update customer ' . $profileId . ' for client ' . $clientId . ', keeping it unchanged. ' . $e->getMessage());
+                break;
+            }
         }
 
         try {
-            if ($this->getVariable('Test Mode?') == '1') {
-                $key = $this->getVariable('Stripe Checkout Test Secret Key');
-            } else {
-                $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
-            }
-
-            // Use Stripe's bindings...
-            \Stripe\Stripe::setApiKey($key);
-            \Stripe\Stripe::setAppInfo(
-                'Clientexec',
-                CE_Lib::getAppVersion(),
-                'https://www.clientexec.com',
-                STRIPE_PARTNER_ID
-            );
-            \Stripe\Stripe::setApiVersion(STRIPE_API_VERSION);
-
-            if (isset($params['plugincustomfields']['stripeTokenId']) && $params['plugincustomfields']['stripeTokenId'] != "") {
-                $profile_id = '';
-                $Billing_Profile_ID = '';
-                $profile_id_array = array();
-                $user = new User($params['CustomerID']);
-
-                if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
-                    $profile_id_array = unserialize($Billing_Profile_ID);
-
-                    if (is_array($profile_id_array)) {
-                        if (isset($profile_id_array[basename(dirname(__FILE__))])) {
-                            $profile_id = $profile_id_array[basename(dirname(__FILE__))];
-                        } elseif (isset($profile_id_array['stripecheckout'])) {
-                            $profile_id = $profile_id_array['stripecheckout'];
-                        } elseif (isset($profile_id_array['stripe'])) {
-                            $profile_id = $profile_id_array['stripe'];
-                        }
-                    }
-                }
-
-                $profile_id_values_array = explode('|', $profile_id);
-                $profile_id = $profile_id_values_array[0];
-
-                if ($profile_id != '') {
-                    $customer = \Stripe\Customer::retrieve($profile_id);
-                    $customer->name = $params["userFirstName"].' '.$params["userLastName"];
-                    $customer->phone = $params['userPhone'];
-                    $customer->address = array(
-                        'line1'       => $params["userAddress"],
-                        'postal_code' => $params["userZipcode"],
-                        'city'        => $params["userCity"],
-                        'state'       => $params["userState"],
-                        'country'     => $params["userCountry"]
-                    );
-                    $customer->source = $params['plugincustomfields']['stripeTokenId'];
-                    $customer->save();
-                } else {
-                    $customer = \Stripe\Customer::create(
-                        array(
-                            'name'    => $params["userFirstName"].' '.$params["userLastName"],
-                            'address' => array(
-                                'line1'       => $params["userAddress"],
-                                'postal_code' => $params["userZipcode"],
-                                'city'        => $params["userCity"],
-                                'state'       => $params["userState"],
-                                'country'     => $params["userCountry"]
-                            ),
-                            'email'   => $params['userEmail'],
-                            'phone'   => $params['userPhone'],
-                            'card'    => $params['plugincustomfields']['stripeTokenId']
-                        )
-                    );
-                }
-
-                $profile_id = $customer->id;
-                $Billing_Profile_ID = '';
-                $profile_id_array = array();
-                $user = new User($params['CustomerID']);
-
-                if ($user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
-                    $profile_id_array = unserialize($Billing_Profile_ID);
-                }
-
-                if (!is_array($profile_id_array)) {
-                    $profile_id_array = array();
-                }
-
-                $profile_id_array[basename(dirname(__FILE__))] = $profile_id;
-                $user->updateCustomTag('Billing-Profile-ID', serialize($profile_id_array));
-                $user->save();
-
-                return array(
-                    'error'               => false,
-                    'profile_id'          => $profile_id
-                );
-            } else {
-                return array(
-                    'error'  => true,
-                    'detail' => $this->user->lang("There was an error performing this operation.") . " " . $this->user->lang("payment_method value is missing.")
-                );
-            }
-        } catch (\Stripe\Error\Card $e) {
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\RateLimit $e) {
-            // Too many requests made to the API too quickly
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Too many requests made to the API too quickly.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\InvalidRequest $e) {
-            // Invalid parameters were supplied to Stripe's API.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Invalid parameters were supplied to Stripe's API.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\Authentication $e) {
-            // Authentication with Stripe's API failed. Maybe you changed API keys recently.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Authentication with Stripe's API failed. Maybe you changed API keys recently.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\ApiConnection $e) {
-            // Network communication with Stripe failed.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Network communication with Stripe failed")." ".$err['message']
-            );
-        } catch (\Stripe\Error\Base $e) {
-            // Display a very generic error to the user, and maybe send yourself an email.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
-            );
+            return \Stripe\Customer::retrieve($profileId);
         } catch (Exception $e) {
-            // Something else happened, completely unrelated to Stripe
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$e->getMessage()
-            );
+            CE_Lib::log(1, 'Stripe Checkout: could not retrieve customer ' . $profileId . ' for client ' . $clientId . '. ' . $e->getMessage());
+            return null;
         }
+    }
+
+    /**
+     * Removes the field Stripe reported as invalid, if it is one of the optional customer fields.
+     * Returns the rejected parameter name, or null if there is nothing that can safely be dropped.
+     */
+    private function dropRejectedCustomerField(array &$fields, \Stripe\Exception\InvalidRequestException $e): ?string
+    {
+        $param = (string)$e->getStripeParam();
+        $field = preg_replace('/\[.*$/', '', $param);
+
+        if (!in_array($field, ['phone', 'address', 'name'], true) || !array_key_exists($field, $fields)) {
+            return null;
+        }
+
+        unset($fields[$field]);
+
+        return $param;
     }
 
     function UpdateGateway($params)
@@ -582,6 +585,15 @@ class PluginStripecheckout extends GatewayPlugin
                 $key = $this->getVariable('Stripe Checkout Test Secret Key');
             } else {
                 $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+            }
+
+            if (strpos((string)$key, 'sk_') !== 0 && strpos((string)$key, 'rk_') !== 0) {
+                CE_Lib::log(
+                    1,
+                    'Stripe Checkout: the secret key configured for this gateway is missing or invalid '
+                    . '(it must start with sk_, or rk_ if it is a restricted API key with limited permissions). Check the Stripe Checkout plugin settings '
+                    . '(Test Mode is ' . ($this->getVariable('Test Mode?') == '1' ? 'on' : 'off') . ').'
+                );
             }
 
             // Use Stripe's bindings...
@@ -650,7 +662,7 @@ class PluginStripecheckout extends GatewayPlugin
 
                     if ($customer === null) {
                         return array(
-                          'error'  => true,
+                            'error'  => true,
                             'detail' => $this->user->lang("There was an error performing this operation.") . " " . $this->user->lang("User does not exist.")
                         );
                     }
@@ -765,70 +777,10 @@ class PluginStripecheckout extends GatewayPlugin
                     'profile_id' => $profile_id
                 );
             }
-        } catch (\Stripe\Error\Card $e) {
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\RateLimit $e) {
-            // Too many requests made to the API too quickly
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Too many requests made to the API too quickly.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\InvalidRequest $e) {
-            // Invalid parameters were supplied to Stripe's API.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Invalid parameters were supplied to Stripe's API.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\Authentication $e) {
-            // Authentication with Stripe's API failed. Maybe you changed API keys recently.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Authentication with Stripe's API failed. Maybe you changed API keys recently.")." ".$err['message']
-            );
-        } catch (\Stripe\Error\ApiConnection $e) {
-            // Network communication with Stripe failed.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$this->user->lang("Network communication with Stripe failed")." ".$err['message']
-            );
-        } catch (\Stripe\Error\Base $e) {
-            // Display a very generic error to the user, and maybe send yourself an email.
-            $body = $e->getJsonBody();
-            $err  = $body['error'];
-
-            //A human-readable message giving more details about the error.
-            return array(
-                'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$err['message']
-            );
         } catch (Exception $e) {
-            // Something else happened, completely unrelated to Stripe
             return array(
                 'error'  => true,
-                'detail' => $this->user->lang("There was an error performing this operation.")." ".$e->getMessage()
+                'detail' => $this->getStripeErrorMessage($e)
             );
         }
     }
@@ -852,12 +804,21 @@ class PluginStripecheckout extends GatewayPlugin
 
         //Pass this variable to your gateway to let it know where to send a callback.
         $urlFix = mb_substr(CE_Lib::getSoftwareURL(), -1, 1) == "//" ? '' : '/';
-        $callbackUrl = CE_Lib::getSoftwareURL().$urlFix.'plugins/gateways/'.basename(dirname(__FILE__)).'/callback.php?isSignup='.$isSignup.'&session_id={CHECKOUT_SESSION_ID}';
-        
+        $callbackUrl = CE_Lib::getSoftwareURL() . $urlFix . 'plugins/gateways/' . basename(dirname(__FILE__)) . '/callback.php?isSignup=' . $isSignup . '&session_id={CHECKOUT_SESSION_ID}';
+
         if ($this->getVariable('Test Mode?') == '1') {
             $key = $this->getVariable('Stripe Checkout Test Secret Key');
         } else {
             $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+        }
+
+        if (strpos((string)$key, 'sk_') !== 0 && strpos((string)$key, 'rk_') !== 0) {
+            CE_Lib::log(
+                1,
+                'Stripe Checkout: the secret key configured for this gateway is missing or invalid '
+                . '(it must start with sk_, or rk_ if it is a restricted API key with limited permissions). Check the Stripe Checkout plugin settings '
+                . '(Test Mode is ' . ($this->getVariable('Test Mode?') == '1' ? 'on' : 'off') . ').'
+            );
         }
 
         // Use Stripe's bindings...
@@ -889,6 +850,7 @@ class PluginStripecheckout extends GatewayPlugin
             //Set payment_intent off_session
             'payment_intent_data'  => array(
                 'setup_future_usage' => 'off_session',
+                'capture_method'     => 'manual',
             ),
             'success_url'          => $callbackUrl,
             'cancel_url'           => $callbackUrl
@@ -905,30 +867,11 @@ class PluginStripecheckout extends GatewayPlugin
 
         $session = \Stripe\Checkout\Session::create($sessionParams);
 
-        if ($this->getVariable('Test Mode?') == '1') {
-            $publishableKey = $this->getVariable('Stripe Checkout Test Publishable Key');
-        } else {
-            $publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
-        }
-
-        $sessionId = $session->id;
-
-        $strRet = '<script data-cfasync="false" src="https://js.stripe.com/v3/"></script>'
-            .'<script data-cfasync="false" type="text/javascript">'
-            .'    var stripe = Stripe("'.$publishableKey.'");'
-            // Open Checkout with further options
-            .'    stripecheckoutOpenHandler();'
-            .'    function stripecheckoutOpenHandler() {'
-            .'        stripe.redirectToCheckout({'
-            .'            sessionId: "'.$sessionId.'"'
-            .'        }).then(function (result) {'
-            // If `redirectToCheckout` fails due to a browser or network error, display the localized error message to your customer using `result.error.message`
-            .'            console.log(result);'
-            .'            console.log(result.error.message);'
-            .'            alert(result.error.message);'
-            .'        });'
-            .'    }'
-            .'</script>';
+        // Stripe.js removed redirectToCheckout() starting with Clover, so redirect to the
+        // hosted Checkout page URL directly
+        $strRet = '<script data-cfasync="false" type="text/javascript">'
+            . '    window.location.href = ' . json_encode($session->url) . ';'
+            . '</script>';
 
         return $strRet;
     }
@@ -943,47 +886,24 @@ class PluginStripecheckout extends GatewayPlugin
 
         switch ($params['from']) {
             case 'paymentmethod':
-                $this->view->hasBillingProfile = false;
+                // Card updates go through a setup-mode Checkout Session (see updatePaymentMethod())
+                // The saved "Call on updateGatewayInformation" setting on existing installs calls
+                // createFullCustomerProfile() when stripeTokenId is not empty, so the field keeps that name and
+                // now just carries a flag. createFullCustomerProfile() hands off to updatePaymentMethod().
+                // The payment method page calls stripecheckoutOpenHandler() when a client without a saved card
+                // selects this gateway (see the "openHandler" variable). It is intentionally a no-op: the client
+                // clicks "Update Credit Card", which submits the form.
+                $strRet = '<input type="hidden" id="stripeTokenId" name="stripecheckout_plugincustomfields[stripeTokenId]" value="1">'
+                    . '<button style="margin-left:0px;cursor:pointer;" class="btn btn-primary customButton stripecheckoutButton" id="customButton">' . $this->user->lang("Update Credit Card") . '</button>'
+                    . '<script data-cfasync="false" type="text/javascript">'
+                    . '    function stripecheckoutOpenHandler() {'
+                    . '    }'
+                    . '</script>';
 
-                if ($this->getVariable('Test Mode?') == '1') {
-                    $this->view->publishableKey = $this->getVariable('Stripe Checkout Test Publishable Key');
-                } else {
-                    $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
-                }
-
-                $this->view->logoImage = $this->getVariable('Stripe Checkout Logo Image URL');
-                $this->view->companyName = $this->settings->get("Company Name");
-                $this->view->invoiceId = $params['invoiceId'];
-                $this->view->currency = $params['currency'];
-                $this->view->invoiceBalanceDue = $params['invoiceBalanceDue'];
-                $this->view->panelLabel = $params['panellabel'];
-                $this->view->termsConditions = $params['termsConditions'];
-
-                $Billing_Profile_ID = '';
-
-                if ($this->user->getCustomFieldsValue('Billing-Profile-ID', $Billing_Profile_ID) && $Billing_Profile_ID != '') {
-                    $profile_id_array = unserialize($Billing_Profile_ID);
-
-                    if (is_array($profile_id_array)) {
-                        if (isset($profile_id_array[basename(dirname(__FILE__))])) {
-                            $this->view->hasBillingProfile = true;
-                        } elseif (isset($profile_id_array['stripecheckout'])) {
-                            $this->view->hasBillingProfile = true;
-                        } elseif (isset($profile_id_array['stripe'])) {
-                            $this->view->hasBillingProfile = true;
-                        }
-                    }
-                }
-
-                if ($this->view->logoImage == '') {
-                    $SoftwareURL = mb_substr(CE_Lib::getSoftwareURL(), -1, 1) == "//" ? CE_Lib::getSoftwareURL() : CE_Lib::getSoftwareURL()."/";
-                    $this->view->logoImage = $SoftwareURL.'plugins/gateways/stripecheckout/logo.png';
-                }
-
-                return $this->view->render('form.phtml');
+                return $strRet;
                 break;
             case 'signup':
-                $fakeForm = '<a style="margin-left:0px;cursor:pointer;" class="app-btns primary customButton center-on-mobile '.((@$params['termsConditions'])? 'disabled' : '').'" onclick="cart.submit_form('.$params['loggedIn'].');"  id="submitButton"></a>';
+                $fakeForm = '<a style="margin-left:0px;cursor:pointer;" class="app-btns primary customButton center-on-mobile ' . ((@$params['termsConditions']) ? 'disabled' : '') . '" onclick="cart.submit_form(' . $params['loggedIn'] . ');"  id="submitButton"></a>';
 
                 return $fakeForm;
                 break;
@@ -999,13 +919,22 @@ class PluginStripecheckout extends GatewayPlugin
 
                 //Pass this variable to your gateway to let it know where to send a callback.
                 $urlFix = mb_substr(CE_Lib::getSoftwareURL(), -1, 1) == "//" ? '' : '/';
-                $callbackUrl = CE_Lib::getSoftwareURL().$urlFix.'plugins/gateways/'.basename(dirname(__FILE__)).'/callback.php?isSignup='.$isSignup.'&session_id={CHECKOUT_SESSION_ID}';
+                $callbackUrl = CE_Lib::getSoftwareURL() . $urlFix . 'plugins/gateways/' . basename(dirname(__FILE__)) . '/callback.php?isSignup=' . $isSignup . '&session_id={CHECKOUT_SESSION_ID}';
 
                 try {
                     if ($this->getVariable('Test Mode?') == '1') {
                         $key = $this->getVariable('Stripe Checkout Test Secret Key');
                     } else {
                         $key = $this->getVariable('Stripe Checkout Gateway Secret Key');
+                    }
+
+                    if (strpos((string)$key, 'sk_') !== 0 && strpos((string)$key, 'rk_') !== 0) {
+                        CE_Lib::log(
+                            1,
+                            'Stripe Checkout: the secret key configured for this gateway is missing or invalid '
+                            . '(it must start with sk_, or rk_ if it is a restricted API key with limited permissions). Check the Stripe Checkout plugin settings '
+                            . '(Test Mode is ' . ($this->getVariable('Test Mode?') == '1' ? 'on' : 'off') . ').'
+                        );
                     }
 
                     // Use Stripe's bindings...
@@ -1039,6 +968,7 @@ class PluginStripecheckout extends GatewayPlugin
                         //Set payment_intent off_session
                         'payment_intent_data'  => array(
                             'setup_future_usage' => 'off_session',
+                            'capture_method'     => 'manual',
                         ),
                         'success_url'          => $callbackUrl,
                         'cancel_url'           => $callbackUrl
@@ -1073,13 +1003,7 @@ class PluginStripecheckout extends GatewayPlugin
 
                     $session = \Stripe\Checkout\Session::create($sessionParams);
 
-                    if ($this->getVariable('Test Mode?') == '1') {
-                        $this->view->publishableKey = $this->getVariable('Stripe Checkout Test Publishable Key');
-                    } else {
-                        $this->view->publishableKey = $this->getVariable('Stripe Checkout Gateway Publishable Key');
-                    }
-
-                    $this->view->sessionId = $session->id;
+                    $this->view->sessionUrl = $session->url;
 
                     return $this->view->render('sca.phtml');
                     break;
@@ -1088,5 +1012,40 @@ class PluginStripecheckout extends GatewayPlugin
                     return '';
                 }
         }
+    }
+
+    /**
+     * Entry point from "Call on updateGatewayInformation" when the client submits the payment method
+     * page. The name is kept so the setting already saved on existing installs keeps working.
+     */
+    public function createFullCustomerProfile($params): mixed
+    {
+        return $this->updatePaymentMethod($params);
+    }
+
+    /**
+     * Builds the error message returned to the caller for a failed Stripe operation, and logs
+     * Stripe API errors with their request ID so they can be traced in the Stripe dashboard.
+     */
+    private function getStripeErrorMessage(Exception $e): string
+    {
+        $message = $this->user->lang("There was an error performing this operation.");
+
+        if ($e instanceof \Stripe\Exception\ApiErrorException) {
+            CE_Lib::log(4, 'Stripe API error (' . get_class($e) . '): ' . $e->getMessage() . ' Request ID: ' . $e->getRequestId());
+        }
+
+        // RateLimitException extends InvalidRequestException, so it must be checked first
+        if ($e instanceof \Stripe\Exception\RateLimitException) {
+            $message .= " " . $this->user->lang("Too many requests made to the API too quickly.");
+        } elseif ($e instanceof \Stripe\Exception\InvalidRequestException) {
+            $message .= " " . $this->user->lang("Invalid parameters were supplied to Stripe's API.");
+        } elseif ($e instanceof \Stripe\Exception\AuthenticationException) {
+            $message .= " " . $this->user->lang("Authentication with Stripe's API failed. Maybe you changed API keys recently.");
+        } elseif ($e instanceof \Stripe\Exception\ApiConnectionException) {
+            $message .= " " . $this->user->lang("Network communication with Stripe failed");
+        }
+
+        return $message . " " . $e->getMessage();
     }
 }
